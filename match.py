@@ -4,7 +4,7 @@ import os
 from ase.db import connect
 from ase.io import read
 from ase.visualize import view
-from miller_custom import MillerSearch
+from db_ogre_match.miller_custom import MillerSearch
 from tqdm import tqdm
 
 

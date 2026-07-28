@@ -1,5 +1,5 @@
 from unittest.mock import MagicMock
-from match import match_row
+from db_ogre_match.match import match_row
 
 
 def test_match_row_calls_matcher_with_atoms_and_returns_triplet():

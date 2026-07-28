@@ -1,11 +1,9 @@
 import os
-import sys
 from pathlib import Path
 
-EXAMPLE_DIR = Path(__file__).resolve().parent
+from db_ogre_match.match import match_database
 
-sys.path.insert(0, str(EXAMPLE_DIR.parent))
-from match import match_database
+EXAMPLE_DIR = Path(__file__).resolve().parent
 
 os.chdir(EXAMPLE_DIR)
 
