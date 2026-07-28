@@ -1,3 +1,6 @@
+"""Match every structure in a mother database against a substrate, writing
+results to db and CSV."""
+
 import argparse
 import csv
 import os
@@ -9,6 +12,10 @@ from tqdm import tqdm
 
 
 class Matcher:
+    """
+    Runs a MillerSearch scan of a fixed substrate against a given film.
+    """
+
     def __init__(
         self,
         substrate,
@@ -38,6 +45,10 @@ class Matcher:
 
 
 def match_row(row, matcher):
+    """
+    Run matcher against a single mother-db row, returning its atoms,
+    key-value pairs, and match results.
+    """
     atoms = row.toatoms()
     kwp = row.key_value_pairs
     results = matcher(atoms)
@@ -45,11 +56,17 @@ def match_row(row, matcher):
 
 
 class CsvWriter:
+    """
+    Appends dict rows to a CSV file, inferring the header from the first
+    row.
+    """
+
     def __init__(self, path, append):
         self.file = open(path, 'a' if append else 'w', newline='')
         self.writer = None
 
     def writerow(self, row):
+        """Write row, creating the DictWriter and header on the first call."""
         if self.writer is None:
             self.writer = csv.DictWriter(self.file, fieldnames=list(row.keys()))
             if self.file.tell() == 0:
@@ -58,6 +75,9 @@ class CsvWriter:
 
 
 def store_matches(newdb, csv_writer, atoms, kwp, results):
+    """
+    Write each match result for a row to both newdb and csv_writer.
+    """
     for result in results:
         kwp.update(result)
         newdb.write(atoms, **kwp)
@@ -65,10 +85,16 @@ def store_matches(newdb, csv_writer, atoms, kwp, results):
 
 
 def checkpoint_path_for(output_db):
+    """
+    Return the checkpoint file path that goes alongside output_db.
+    """
     return f'{output_db}.checkpoint'
 
 
 def read_checkpoint(checkpoint_path):
+    """
+    Return the last completed row id, or None if no checkpoint exists.
+    """
     if not os.path.exists(checkpoint_path):
         return None
 
@@ -77,13 +103,27 @@ def read_checkpoint(checkpoint_path):
 
 
 def write_checkpoint(checkpoint_path, row_id):
+    """
+    Atomically record row_id as the last row fully processed.
+    """
     tmp_path = f'{checkpoint_path}.tmp'
     with open(tmp_path, 'w') as f:
         f.write(str(row_id))
     os.replace(tmp_path, checkpoint_path)
 
 
-def run_matching(db, newdb, csv_writer, matcher, selection=None, checkpoint_path=None):
+def run_matching(
+    db,
+    newdb,
+    csv_writer,
+    matcher,
+    selection=None,
+    checkpoint_path=None
+):
+    """
+    Match every selected row in db, storing results and advancing the
+    checkpoint after each row (even ones that raised and were skipped).
+    """
     for row in tqdm(db.select(selection)):
         try:
             atoms, kwp, results = match_row(row, matcher)
@@ -107,6 +147,10 @@ def match_database(
     output_csv,
     restart,
 ):
+    """
+    Match mother_db against substrate and write results under db/ and csv/,
+    optionally resuming from the output db's checkpoint file.
+    """
     os.makedirs('db', exist_ok=True)
     os.makedirs('csv', exist_ok=True)
 
@@ -138,7 +182,13 @@ def match_database(
         max_area
     )
 
-    run_matching(db, newdb, csv_writer, matcher, selection, checkpoint_path)
+    run_matching(
+        db, newdb,
+        csv_writer,
+        matcher,
+        selection,
+        checkpoint_path
+    )
     csv_writer.file.close()
 
 
