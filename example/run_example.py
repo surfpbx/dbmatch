@@ -5,11 +5,11 @@ from pathlib import Path
 EXAMPLE_DIR = Path(__file__).resolve().parent
 
 sys.path.insert(0, str(EXAMPLE_DIR.parent))
-from match import main
+from match import match_database
 
 os.chdir(EXAMPLE_DIR)
 
-main(
+match_database(
     mother_db='mother-dataset.db',
     substrate='substrate.cif',
     max_substrate_index=1,

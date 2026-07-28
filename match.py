@@ -96,7 +96,7 @@ def run_matching(db, newdb, csv_writer, matcher, selection=None, checkpoint_path
             write_checkpoint(checkpoint_path, row.id)
 
 
-def main(
+def match_database(
     mother_db,
     substrate,
     max_substrate_index,
@@ -185,7 +185,7 @@ if __name__ == '__main__':
     )
     args = parser.parse_args()
 
-    main(
+    match_database(
         args.mother_db,
         args.substrate,
         args.max_substrate_index,
