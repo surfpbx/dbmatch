@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+
+data/db/
+db/
+csv/
+*.checkpoint
+
+tests/data/matches.db
