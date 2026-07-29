@@ -1,14 +1,8 @@
-import os
 from pathlib import Path
 import pytest
 from ase.db import connect
 from ase.io import read
 from db_ogre_match.match import Matcher, match_row
-
-pytestmark = pytest.mark.skipif(
-    os.environ.get("RUN_DATA_TESTS") != "1",
-    reason="opt-in: runs real MillerSearch scans over all test-mother.db rows (~1 min); set RUN_DATA_TESTS=1 to run",
-)
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 MATCH_KEYS = [
