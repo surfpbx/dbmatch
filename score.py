@@ -226,11 +226,11 @@ if __name__ == '__main__':
         help='path to the matches database'
     )
     parser.add_argument(
-        '-o', '--output-db', default='scores.db',
+        '-o', '--output-db', default=config.score.output_db,
         help="name of the output database file, written under 'db/' (default: %(default)s)"
     )
     parser.add_argument(
-        '--output-csv', default='scores.csv',
+        '--output-csv', default=config.score.output_csv,
         help="name of the output CSV file, written under 'csv/' (default: %(default)s)"
     )
     parser.add_argument(

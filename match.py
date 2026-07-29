@@ -7,6 +7,7 @@ import os
 from ase.db import connect
 from ase.io import read
 from ase.visualize import view
+from db_ogre_match import config
 from db_ogre_match.miller_custom import MillerSearch
 from tqdm import tqdm
 
@@ -38,7 +39,7 @@ class Matcher:
             max_film_index=self.max_film_index,
             max_substrate_index=self.max_substrate_index,
             max_strain=self.max_strain,
-            max_area_mismatch=0.08,
+            max_area_mismatch=config.match.max_area_mismatch,
             max_area=self.max_area
         )
         return ms.run_scan()
@@ -203,27 +204,27 @@ if __name__ == '__main__':
         help='path to the substrate structure file'
     )
     parser.add_argument(
-        '--max-substrate-index', type=int, default=1,
+        '--max-substrate-index', type=int, default=config.match.max_sub_index,
         help='max substrate miller index (default: %(default)s)'
     )
     parser.add_argument(
-        '--max-film-index', type=int, default=1,
+        '--max-film-index', type=int, default=config.match.max_flm_index,
         help='max film miller index (default: %(default)s)'
     )
     parser.add_argument(
-        '--max-strain', type=float, default=0.05,
+        '--max-strain', type=float, default=config.match.max_strain,
         help='max strain (default: %(default)s)'
     )
     parser.add_argument(
-        '--max-area', type=float, default=500,
+        '--max-area', type=float, default=config.match.max_area,
         help='max area (default: %(default)s)'
     )
     parser.add_argument(
-        '-o', '--output-db', default='matches.db',
+        '-o', '--output-db', default=config.match.output_db,
         help="name of the output database file, written under 'db/' (default: %(default)s)"
     )
     parser.add_argument(
-        '--output-csv', default='matches.csv',
+        '--output-csv', default=config.match.output_csv,
         help="name of the output CSV file, written under 'csv/' (default: %(default)s)"
     )
     parser.add_argument(
