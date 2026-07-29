@@ -50,6 +50,21 @@ export PYTHONPATH="/path/to/OgreInterface:$PYTHONPATH"
 Either way, `import OgreInterface` has to succeed before `db_ogre_match`
 will work -- `miller_custom.py` imports directly from it.
 
+**Known issue:** a fresh `pip install -e ./OgreInterface` can resolve a
+`numpy`/`pandas` combination that's binary-incompatible (`OgreInterface`
+pins `pandas<=2.0.0`, built pre-NumPy-2.0, but doesn't cap `numpy`, and
+`pymatgen`/`matscipy` pull in `numpy>=2`), which fails on
+`import OgreInterface` with `numpy.dtype size changed, may indicate
+binary incompatibility`. This is unrelated to anything `db_ogre_match`
+actually needs from `OgreInterface` -- pandas only gets touched because
+`OgreInterface/data/ionic_radii.py` reads a CSV via pandas at import time,
+in a module chain that `miller.py` pulls in regardless of whether the
+function that uses it (`estimate_atomic_radius`, part of the unrelated
+Lennard-Jones surface-matching code) is ever called. If you hit this,
+pin `numpy<2` after installing `OgreInterface`; note that conflicts with
+`matscipy`'s own `numpy>=2.0.0` requirement, so treat it as a workaround,
+not a real fix -- this needs fixing upstream in `OgreInterface`.
+
 ## Input format
 
 `mother_db` is an ASE database where every row is one candidate material,
