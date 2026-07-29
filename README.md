@@ -21,49 +21,80 @@ mother_db + substrate  --match.py-->  matches db/csv  --score.py-->  scores db/c
 
 ## Installation
 
+`OgreInterface` is **not** on PyPI and is not declared as a dependency in
+`pyproject.toml` -- it has to be set up separately, and *how* matters (see
+below). The short version: **don't** `pip install` `OgreInterface` itself;
+clone it, install its dependencies directly, and put the clone on the
+import path.
+
+### Why not `pip install -e ./OgreInterface`
+
+`OgreInterface`'s own `pyproject.toml` pins `pandas<=2.0.0` (a pre-NumPy-2.0
+release) but leaves `numpy` uncapped, and pulls in `matscipy`, whose
+current release requires `numpy>=2.0.0`. Let pip resolve those together and
+you get a `numpy`/`pandas` combination that's binary-incompatible --
+`import OgreInterface` fails with `numpy.dtype size changed, may indicate
+binary incompatibility`. Forcing `numpy<2` afterwards just trades that
+error for a conflict with `matscipy`'s own pin.
+
+None of this is actually needed: `matscipy` is only used by
+`OgreInterface`'s `randomizer/` and `surface_matching/` submodules, not by
+the `MillerSearch`/`OrientedBulk`/`ZurMcGill` path that `miller_custom.py`
+(and so `db_ogre_match`) actually imports. And the *only* reason `pandas`
+matters here is that `OgreInterface/data/ionic_radii.py` reads a CSV via
+pandas at import time, in a module chain `miller.py` pulls in regardless
+of whether the function that uses it (`estimate_atomic_radius`, part of
+the unrelated Lennard-Jones surface-matching code) is ever called.
+
+So: skip `pip install`ing `OgreInterface`'s own package metadata (and its
+stale pin) entirely. Install its actual runtime dependencies yourself,
+unpinned, alongside `db_ogre_match` in one `pip install` call, then just
+put the cloned source on the import path. Verified working end to end
+(fresh venv, `pytest`, the full example workflow) with this recipe.
+
+### Plain Python (`venv`)
+
 ```bash
-pip install -e .
-```
+python3 -m venv venv
+source venv/bin/activate
 
-This installs `ase` and `tqdm`, the only two dependencies declared in
-`pyproject.toml`.
+# db_ogre_match itself, plus OgreInterface's actual runtime deps (unpinned,
+# and without matscipy -- see above)
+pip install -e . pymatgen matplotlib scipy pandas scikit-opt cmcrameri seaborn XlsxWriter
 
-### OgreInterface
-
-`OgreInterface` is **not** on PyPI and is not declared as a dependency here
--- it has to be installed separately:
-
-```bash
+# OgreInterface has no PyPI release -- clone it instead of pip-installing it
 git clone https://github.com/DerekDardzinski/OgreInterface.git
-pip install -e ./OgreInterface
+
+# put it on the import path permanently, without touching PYTHONPATH:
+# a .pth file in site-packages is read by Python on every startup in this
+# environment, venv or conda alike
+echo "$(pwd)/OgreInterface" > "$(python3 -c 'import site; print(site.getsitepackages()[0])')/ogreinterface.pth"
 ```
 
-That pulls in its own (heavier) dependencies: `pymatgen`, `scipy`,
-`matscipy`, `matplotlib`, etc. Alternatively, if you already have a
-checkout of `OgreInterface` somewhere, you can skip the install and just
-put its parent directory on `PYTHONPATH`:
+### Conda
+
+Same recipe -- conda just provides the Python interpreter/environment,
+`pip` still does the actual installs:
 
 ```bash
-export PYTHONPATH="/path/to/OgreInterface:$PYTHONPATH"
+conda create -n db-ogre-match python=3.10
+conda activate db-ogre-match
+
+pip install -e . pymatgen matplotlib scipy pandas scikit-opt cmcrameri seaborn XlsxWriter
+
+git clone https://github.com/DerekDardzinski/OgreInterface.git
+echo "$(pwd)/OgreInterface" > "$(python3 -c 'import site; print(site.getsitepackages()[0])')/ogreinterface.pth"
 ```
 
-Either way, `import OgreInterface` has to succeed before `db_ogre_match`
-will work -- `miller_custom.py` imports directly from it.
+### Verify it worked
 
-**Known issue:** a fresh `pip install -e ./OgreInterface` can resolve a
-`numpy`/`pandas` combination that's binary-incompatible (`OgreInterface`
-pins `pandas<=2.0.0`, built pre-NumPy-2.0, but doesn't cap `numpy`, and
-`pymatgen`/`matscipy` pull in `numpy>=2`), which fails on
-`import OgreInterface` with `numpy.dtype size changed, may indicate
-binary incompatibility`. This is unrelated to anything `db_ogre_match`
-actually needs from `OgreInterface` -- pandas only gets touched because
-`OgreInterface/data/ionic_radii.py` reads a CSV via pandas at import time,
-in a module chain that `miller.py` pulls in regardless of whether the
-function that uses it (`estimate_atomic_radius`, part of the unrelated
-Lennard-Jones surface-matching code) is ever called. If you hit this,
-pin `numpy<2` after installing `OgreInterface`; note that conflicts with
-`matscipy`'s own `numpy>=2.0.0` requirement, so treat it as a workaround,
-not a real fix -- this needs fixing upstream in `OgreInterface`.
+```bash
+python3 -c "import db_ogre_match, OgreInterface; print('OK')"
+pytest
+```
+
+`import OgreInterface` has to succeed before `db_ogre_match` will work --
+`miller_custom.py` imports directly from it.
 
 ## Input format
 
