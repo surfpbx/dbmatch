@@ -29,7 +29,7 @@ def matcher(substrate):
         max_substrate_index=1,
         max_film_index=1,
         max_strain=0.05,
-        max_area=500,
+        max_area=100,
     )
 
 
