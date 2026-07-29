@@ -124,7 +124,7 @@ def run_matching(
     Match every selected row in db, storing results and advancing the
     checkpoint after each row (even ones that raised and were skipped).
     """
-    for row in tqdm(db.select(selection)):
+    for row in tqdm(db.select(selection), total=db.count(selection)):
         try:
             atoms, kwp, results = match_row(row, matcher)
         except:
