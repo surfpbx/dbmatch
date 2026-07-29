@@ -14,3 +14,12 @@ dependencies = [
 [tool.setuptools]
 packages = ["db_ogre_match"]
 package-dir = {"db_ogre_match" = "."}
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    # noisy third-party deprecation warnings (spglib, OgreInterface) unrelated
+    # to this package's own code; pytest resets warning filters per-test, so
+    # this must be configured here too, in addition to __init__.py's
+    "ignore:Set OLD_ERROR_HANDLING to false and catch the errors directly.:DeprecationWarning",
+    "ignore:dict interface is deprecated. Use attribute interface instead:DeprecationWarning",
+]
