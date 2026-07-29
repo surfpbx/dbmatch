@@ -192,7 +192,7 @@ def score_materials(
     os.makedirs('csv', exist_ok=True)
     os.makedirs('db', exist_ok=True)
     csv_writer = CsvWriter(os.path.join('csv', output_csv), append=False)
-    newdb = connect(os.path.join('db', output_db))
+    newdb = connect(os.path.join('db', output_db), append=False)
 
     for rows in tqdm(grouped.values()):
         # static per-material properties, taken from the first match row
