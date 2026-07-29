@@ -1,6 +1,6 @@
 import pytest
 from db_ogre_match import config
-from db_ogre_match.score_db import build_tier_values, comp_score, geom_score_for_material, sg_score
+from db_ogre_match.score import build_tier_values, comp_score, geom_score_for_material, sg_score
 
 
 def match_row(sub_hkl, flm_hkl, bravais='HEX', n_sub_reps=1, n_flm_reps=1):
