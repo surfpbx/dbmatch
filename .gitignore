@@ -9,3 +9,5 @@ csv/
 *.checkpoint
 
 tests/data/matches.db
+
+CLAUDE.md

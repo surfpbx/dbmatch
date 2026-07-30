@@ -5,10 +5,10 @@ finding epitaxial interfaces via [OgreInterface](https://github.com/DerekDardzin
 then score each material by how well and how compatibly it matches.
 
 The pipeline has two stages, each reading and writing plain [ASE
-databases](https://wiki.fysik.dtu.dk/ase/ase/db/db.html) and CSV files:
+databases](https://docs.ase-lib.org/ase/db/db.html) and CSV files:
 
 ```
-mother_db + substrate  --match.py-->  matches db/csv  --score.py-->  scores db/csv
+mother_db + substrate  --match.py -->  matches db/csv  --score.py -->  scores db/csv
 ```
 
 - **`match.py`** scans every structure in the mother database against the
@@ -21,46 +21,25 @@ mother_db + substrate  --match.py-->  matches db/csv  --score.py-->  scores db/c
 
 ## Installation
 
+Below, the install instructions with both plain Python and Conda.
 `OgreInterface` is **not** on PyPI and is not declared as a dependency in
-`pyproject.toml` -- it has to be set up separately, and *how* matters (see
-below). The short version: **don't** `pip install` `OgreInterface` itself;
-clone it, install its dependencies directly, and put the clone on the
+`pyproject.toml` -- it has to be set up separately. 
+To avoid dependency conflicts, **don't** `pip install` `OgreInterface` itself;
+clone it, install only the needed dependencies directly, and put the clone on the
 import path.
-
-### Why not `pip install -e ./OgreInterface`
-
-`OgreInterface`'s own `pyproject.toml` pins `pandas<=2.0.0` (a pre-NumPy-2.0
-release) but leaves `numpy` uncapped, and pulls in `matscipy`, whose
-current release requires `numpy>=2.0.0`. Let pip resolve those together and
-you get a `numpy`/`pandas` combination that's binary-incompatible --
-`import OgreInterface` fails with `numpy.dtype size changed, may indicate
-binary incompatibility`. Forcing `numpy<2` afterwards just trades that
-error for a conflict with `matscipy`'s own pin.
-
-None of this is actually needed: `matscipy` is only used by
-`OgreInterface`'s `randomizer/` and `surface_matching/` submodules, not by
-the `MillerSearch`/`OrientedBulk`/`ZurMcGill` path that `miller_custom.py`
-(and so `db_ogre_match`) actually imports. And the *only* reason `pandas`
-matters here is that `OgreInterface/data/ionic_radii.py` reads a CSV via
-pandas at import time, in a module chain `miller.py` pulls in regardless
-of whether the function that uses it (`estimate_atomic_radius`, part of
-the unrelated Lennard-Jones surface-matching code) is ever called.
-
-So: skip `pip install`ing `OgreInterface`'s own package metadata (and its
-stale pin) entirely. Install its actual runtime dependencies yourself,
-unpinned, alongside `db_ogre_match` in one `pip install` call, then just
-put the cloned source on the import path. Verified working end to end
-(fresh venv, `pytest`, the full example workflow) with this recipe.
 
 ### Plain Python (`venv`)
 
 ```bash
+# create a virtual environment 
 python3 -m venv venv
 source venv/bin/activate
 
-# db_ogre_match itself, plus OgreInterface's actual runtime deps (unpinned,
-# and without matscipy -- see above)
-pip install -e . pymatgen matplotlib scipy pandas scikit-opt cmcrameri seaborn XlsxWriter
+# install db_ogre_match itself, plus OgreInterface's actual runtime deps
+# (unpinned, and trimmed to just what miller_custom.py's import path needs)
+cd venv
+git clone https://github.com/surfpbx/dbmatch.git
+pip install -e ./dbmatch pymatgen matplotlib scipy pandas
 
 # OgreInterface has no PyPI release -- clone it instead of pip-installing it
 git clone https://github.com/DerekDardzinski/OgreInterface.git
@@ -80,9 +59,13 @@ Same recipe -- conda just provides the Python interpreter/environment,
 conda create -n db-ogre-match python=3.10
 conda activate db-ogre-match
 
-pip install -e . pymatgen matplotlib scipy pandas scikit-opt cmcrameri seaborn XlsxWriter
+mkdir db-ogre-match
+cd db-ogre-match
+git clone https://github.com/surfpbx/dbmatch.git
+pip install -e ./dbmatch pymatgen matplotlib scipy pandas
 
 git clone https://github.com/DerekDardzinski/OgreInterface.git
+
 echo "$(pwd)/OgreInterface" > "$(python3 -c 'import site; print(site.getsitepackages()[0])')/ogreinterface.pth"
 ```
 
