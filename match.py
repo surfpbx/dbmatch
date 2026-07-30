@@ -180,6 +180,10 @@ def match_database(
     db = connect(mother_db)
     newdb = connect(db_path, append=do_restart)
     csv_writer = CsvWriter(csv_path, append=do_restart)
+    # TODO: record mother_db's absolute path in newdb.metadata, the same way
+    # score.py now records matches_db's path in the scores db's metadata --
+    # so a matches row can be traced back to its source mother-db row without
+    # separately tracking which mother_db a given matches_db came from.
 
     substrate_atoms = read(substrate)
 

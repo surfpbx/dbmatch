@@ -61,7 +61,8 @@ def geom_score_for_material(rows, tier_values,
           'n_flm_reps' for a single material (one entry per facet-pairing match).
           The film tier (major/minor) is derived from flm_hkl against
           config.score.major_facets_by_bravais[row['bravais']] -- the film
-          material's own bravais class.
+          material's own bravais class. An 'id' key, if present (as set by
+          group_db), is carried through into selected_match_ids.
 
     For each distinct substrate facet the material hits, the single match row
     maximizing
@@ -75,6 +76,8 @@ def geom_score_for_material(rows, tier_values,
         major_facets_scored     sorted list of the major facet hkl strings kept
         mean_n_sub_reps         mean n_sub_reps over the kept (best-per-facet) rows
         mean_n_flm_reps         mean n_flm_reps over the kept rows
+        selected_match_ids      sorted list of the matches-db ids of the kept
+                                 (best-per-facet) rows
     """
     best = {}
     for row in rows:
@@ -92,7 +95,7 @@ def geom_score_for_material(rows, tier_values,
 
         facet = row['sub_hkl']
         if facet not in best or val > best[facet][0]:
-            best[facet] = (val, nsub, nflm, is_major)
+            best[facet] = (val, nsub, nflm, is_major, row.get('id'))
 
     hits = min(1.0, sum(v[0] for v in best.values()))
 
@@ -100,6 +103,7 @@ def geom_score_for_material(rows, tier_values,
     major_facets = sorted(f for f, v in best.items() if v[3])
     subs = [v[1] for v in best.values()]
     flms = [v[2] for v in best.values()]
+    match_ids = sorted(v[4] for v in best.values() if v[4] is not None)
 
     return {
         'geom_score': hits,
@@ -108,6 +112,7 @@ def geom_score_for_material(rows, tier_values,
         'major_facets_scored': major_facets,
         'mean_n_sub_reps': (sum(subs) / len(subs)) if subs else None,
         'mean_n_flm_reps': (sum(flms) / len(flms)) if flms else None,
+        'selected_match_ids': match_ids,
     }
 
 
@@ -143,10 +148,14 @@ def group_db(db):
 
 
 def _csv_row(mat):
-    """mat, with major_facets_scored serialised as a ';'-separated string
-    (e.g. '0,0,1;1,1,0') so the comma-bearing hkl labels don't collide with
-    the CSV delimiter."""
-    return {**mat, 'major_facets_scored': ';'.join(mat['major_facets_scored'])}
+    """mat, with major_facets_scored and selected_match_ids serialised as
+    ';'-separated strings (e.g. '0,0,1;1,1,0') so the comma-bearing hkl
+    labels don't collide with the CSV delimiter."""
+    return {
+        **mat,
+        'major_facets_scored': ';'.join(mat['major_facets_scored']),
+        'selected_match_ids': ';'.join(str(i) for i in mat['selected_match_ids']),
+    }
 
 
 def score_materials(
@@ -174,6 +183,11 @@ def score_materials(
     Each material is scored and written (to csv/output_csv and
     db/output_db) as soon as it's scored -- rows land in matches_db's own
     cod_id order, not sorted by total_score. Writes only; returns nothing.
+
+    matches_db's absolute path is recorded in output_db's metadata (as
+    'matches_db'), so that a material's selected_match_ids can later be
+    resolved back to their source rows without having to separately track
+    which matches_db a given scores_db came from.
     """
     print(f'\nScoring materials from {matches_db}...')
 
@@ -195,6 +209,7 @@ def score_materials(
     os.makedirs('db', exist_ok=True)
     csv_writer = CsvWriter(os.path.join('csv', output_csv), append=False)
     newdb = connect(os.path.join('db', output_db), append=False)
+    newdb.metadata = {'matches_db': os.path.abspath(matches_db)}
 
     for rows in tqdm(grouped.values()):
         # static per-material properties, taken from the first match row
