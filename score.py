@@ -175,6 +175,8 @@ def score_materials(
     db/output_db) as soon as it's scored -- rows land in matches_db's own
     cod_id order, not sorted by total_score. Writes only; returns nothing.
     """
+    print(f'\nScoring materials from {matches_db}...')
+
     if not math.isclose(w_geom + w_sg + w_comp, 1.0, abs_tol=1e-9):
         warnings.warn(
             f'score weights do not sum to 1: w_geom={w_geom}, w_sg={w_sg}, '
@@ -217,6 +219,11 @@ def score_materials(
         newdb.write(src_db.get(id=mat['id']), **kvp)
 
     csv_writer.file.close()
+
+    print(
+        f'Scoring finished. Scored {len(grouped)} materials, '
+        f"written to db/{output_db} and csv/{output_csv}."
+    )
 
 
 if __name__ == '__main__':

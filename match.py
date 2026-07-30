@@ -124,7 +124,10 @@ def run_matching(
     """
     Match every selected row in db, storing results and advancing the
     checkpoint after each row (even ones that raised and were skipped).
+
+    Returns the number of match rows written.
     """
+    n_matches = 0
     for row in tqdm(db.select(selection), total=db.count(selection)):
         try:
             atoms, kwp, results = match_row(row, matcher)
@@ -132,9 +135,12 @@ def run_matching(
             print(row.cod_id)
         else:
             store_matches(newdb, csv_writer, atoms, kwp, results)
+            n_matches += len(results)
 
         if checkpoint_path is not None:
             write_checkpoint(checkpoint_path, row.id)
+
+    return n_matches
 
 
 def match_database(
@@ -152,6 +158,8 @@ def match_database(
     Match mother_db against substrate and write results under db/ and csv/,
     optionally resuming from the output db's checkpoint file.
     """
+    print(f'\nMatching {mother_db} against {substrate}...')
+
     os.makedirs('db', exist_ok=True)
     os.makedirs('csv', exist_ok=True)
 
@@ -183,7 +191,7 @@ def match_database(
         max_area
     )
 
-    run_matching(
+    n_matches = run_matching(
         db, newdb,
         csv_writer,
         matcher,
@@ -191,6 +199,11 @@ def match_database(
         checkpoint_path
     )
     csv_writer.file.close()
+
+    print(
+        f'Matching finished. Found {n_matches} matches, '
+        f'written to {db_path} and {csv_path}.'
+    )
 
 
 if __name__ == '__main__':
