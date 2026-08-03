@@ -157,6 +157,11 @@ def match_database(
     """
     Match mother_db against substrate and write results under db/ and csv/,
     optionally resuming from the output db's checkpoint file.
+
+    mother_db's absolute path is recorded in output_db's metadata (as
+    'mother_db'), so that a matches row can be traced back to its source
+    mother-db row without separately tracking which mother_db a given
+    matches_db came from.
     """
     print(f'\nMatching {mother_db} against {substrate}...')
 
@@ -180,10 +185,7 @@ def match_database(
     db = connect(mother_db)
     newdb = connect(db_path, append=do_restart)
     csv_writer = CsvWriter(csv_path, append=do_restart)
-    # TODO: record mother_db's absolute path in newdb.metadata, the same way
-    # score.py now records matches_db's path in the scores db's metadata --
-    # so a matches row can be traced back to its source mother-db row without
-    # separately tracking which mother_db a given matches_db came from.
+    newdb.metadata = {'mother_db': os.path.abspath(mother_db)}
 
     substrate_atoms = read(substrate)
 
