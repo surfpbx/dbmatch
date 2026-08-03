@@ -8,7 +8,7 @@ from ase.db import connect
 from ase.io import read
 from ase.visualize import view
 from db_ogre_match import config
-from db_ogre_match.miller_custom import MillerSearch
+from db_ogre_match.ogre_custom import MillerSearch
 from tqdm import tqdm
 
 

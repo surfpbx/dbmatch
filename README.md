@@ -2,13 +2,15 @@
 
 Match every structure in a "mother" database against a fixed substrate,
 finding epitaxial interfaces via [OgreInterface](https://github.com/DerekDardzinski/OgreInterface),
-then score each material by how well and how compatibly it matches.
+score each material by how well and how compatibly it matches, then
+energetically refine the best matches of a chosen material.
 
-The pipeline has two stages, each reading and writing plain [ASE
-databases](https://docs.ase-lib.org/ase/db/db.html) and CSV files:
+The pipeline has three stages, each reading and writing plain [ASE
+databases](https://docs.ase-lib.org/ase/db/db.html) and CSV files (`refine.py`
+writes only a database, per material):
 
 ```
-mother_db + substrate  --match.py -->  matches db/csv  --score.py -->  scores db/csv
+mother_db + substrate  --match.py -->  matches db/csv  --score.py -->  scores db/csv  --refine.py -->  <formula>-<cod_id>/interfaces.db
 ```
 
 - **`match.py`** scans every structure in the mother database against the
@@ -18,6 +20,10 @@ mother_db + substrate  --match.py -->  matches db/csv  --score.py -->  scores db
   (`cod_id`), and assigns each material a `total_score` based on how many
   facets it hits, how compatible its space group is, and whether it
   contains substrate-compatible elements.
+- **`refine.py`** takes a single material's `cod_id`, rebuilds the matches
+  `score.py` selected for it, and runs `OgreInterface`'s ionic surface
+  matching (in-plane + interfacial-distance energy optimization) over every
+  substrate/film termination combination of each one.
 
 ## Installation
 
@@ -36,7 +42,8 @@ python3 -m venv venv
 source venv/bin/activate
 
 # install db_ogre_match itself, plus OgreInterface's actual runtime deps
-# (unpinned, and trimmed to just what miller_custom.py's import path needs)
+# (unpinned, and trimmed to just what ogre_custom.py's import path needs
+# for match.py/score.py -- see the refine.py note below)
 cd venv
 git clone https://github.com/surfpbx/dbmatch.git
 pip install -e ./dbmatch pymatgen matplotlib scipy pandas
@@ -48,6 +55,10 @@ git clone https://github.com/DerekDardzinski/OgreInterface.git
 # a .pth file in site-packages is read by Python on every startup in this
 # environment, venv or conda alike
 echo "$(pwd)/OgreInterface" > "$(python3 -c 'import site; print(site.getsitepackages()[0])')/ogreinterface.pth"
+
+# only needed if you'll also run refine.py: its IonicSurfaceMatcher pulls in
+# two more of OgreInterface's deps that match.py/score.py never import
+pip install matscipy scikit-opt
 ```
 
 ### Conda
@@ -67,6 +78,9 @@ pip install -e ./dbmatch pymatgen matplotlib scipy pandas
 git clone https://github.com/DerekDardzinski/OgreInterface.git
 
 echo "$(pwd)/OgreInterface" > "$(python3 -c 'import site; print(site.getsitepackages()[0])')/ogreinterface.pth"
+
+# only needed if you'll also run refine.py -- see the Plain Python note above
+pip install matscipy scikit-opt
 ```
 
 ### Verify it worked
@@ -77,7 +91,7 @@ pytest
 ```
 
 `import OgreInterface` has to succeed before `db_ogre_match` will work --
-`miller_custom.py` imports directly from it.
+`ogre_custom.py` imports directly from it.
 
 ## Input format
 
@@ -130,16 +144,35 @@ and writes one material at a time as it goes, rather than buffering
 everything in memory -- rows land in whatever `cod_id` order the source db
 yields, not sorted by score.
 
+Refining a single material's matches, once it's been scored:
+
+```python
+from refine import refine_material
+
+refine_material(
+    substrate='substrate.cif',
+    cod_id=2300704,
+    matches_db='db/matches.db',
+    scores_db='db/scores.db',
+)
+```
+
+`refine_material` writes `<reduced_formula>-<cod_id>/interfaces.db`, one row
+per substrate/film termination combination of each match `score.py` selected
+for that material, plus one plot per match and one PES/z-shift plot pair per
+combination -- see `refine.py`'s module docstring for the full folder layout.
+
 ### From the command line
 
 ```bash
 python match.py mother.db substrate.cif --max-area 500 -o matches.db --output-csv matches.csv
 python score.py db/matches.db -o scores.db --output-csv scores.csv
+python refine.py substrate.cif 2300704
 ```
 
-Run `python match.py --help` / `python score.py --help` for the full list
-of options (miller index cutoffs, strain/area tolerances, score weights,
-...).
+Run `python match.py --help` / `python score.py --help` / `python refine.py
+--help` for the full list of options (miller index cutoffs, strain/area
+tolerances, score weights, slab layers/vacuum/interfacial-distance, ...).
 
 ### Resuming a long matching run
 
@@ -163,21 +196,22 @@ python run_example.py
 
 ## Configuration
 
-`config.py` centralizes the tunable defaults for both stages, under two
-namespaces:
+`config.py` centralizes the tunable defaults for all three stages, under
+three namespaces:
 
 - `config.match` -- miller index cutoffs, strain/area tolerances, and
   default output filenames for `match.py`.
 - `config.score` -- score weights, facet-tier values, the
   substrate-compatible space groups/elements/major-facets, and default
   output filenames for `score.py`.
+- `config.refine` -- slab layers/vacuum, starting interfacial distance, and
+  the interfacial-distance scan bounds for `refine.py`.
 
-Both `match_database`/`match.py` and `score_materials`/`score.py` read
-their keyword/CLI defaults straight from here. Edit the values in
-`config.py` to change the defaults everywhere at once (e.g. to tune
-scoring for a different substrate), or override any of them per-call as a
-keyword argument to `match_database`/`score_materials`, or per-run via the
-CLI flags.
+`match_database`/`match.py`, `score_materials`/`score.py`, and
+`refine_material`/`refine.py` all read their keyword/CLI defaults straight
+from here. Edit the values in `config.py` to change the defaults everywhere
+at once (e.g. to tune scoring for a different substrate), or override any
+of them per-call as a keyword argument, or per-run via the CLI flags.
 
 ## Testing
 
@@ -197,8 +231,9 @@ total_score values in `tests/test_score.py`, without touching disk.
 |------|---------|
 | `match.py` | matching stage: `match_database`, the CLI, checkpoint/restart |
 | `score.py` | scoring stage: `score_materials`, the CLI |
-| `miller_custom.py` | `OgreInterface.MillerSearch` subclass used by `match.py` |
-| `config.py` | shared tunable defaults for both stages |
+| `refine.py` | refinement stage: `refine_material`, the CLI |
+| `ogre_custom.py` | `OgreInterface.MillerSearch` subclass used by `match.py`, plus the closed-form `Interface` reconstruction used by `refine.py` |
+| `config.py` | shared tunable defaults for all three stages |
 | `utils.py` | `db_to_csv`, a standalone db -> CSV dump helper |
 | `example/` | runnable example against the `tests/data/` fixtures |
 | `tests/` | pytest suite, including golden-fixture data |

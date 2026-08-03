@@ -44,3 +44,14 @@ score = SimpleNamespace(
         'S', 'Se', 'Te',
     },
 )
+
+# -----------------------
+# Refinement stage options
+# -----------------------
+refine = SimpleNamespace(
+    layers=5,                 # number of atomic layers in each generated surface slab
+    vacuum=10.0,               # vacuum padding (Angstrom) around each generated surface slab
+    interfacial_distance=3.0, # starting substrate-film separation (Angstrom) before z-shift optimization
+    z_shift_min=1.0,           # lower bound (Angstrom) of the interfacial-distance scan
+    z_shift_n_points=31,       # number of points sampled in the interfacial-distance scan
+)
