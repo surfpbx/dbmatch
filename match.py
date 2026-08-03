@@ -144,8 +144,8 @@ def run_matching(
 
 
 def match_database(
-    mother_db,
     substrate,
+    mother_db,
     max_substrate_index,
     max_film_index,
     max_strain,
@@ -158,10 +158,10 @@ def match_database(
     Match mother_db against substrate and write results under db/ and csv/,
     optionally resuming from the output db's checkpoint file.
 
-    mother_db's absolute path is recorded in output_db's metadata (as
-    'mother_db'), so that a matches row can be traced back to its source
-    mother-db row without separately tracking which mother_db a given
-    matches_db came from.
+    mother_db's and substrate's absolute paths are recorded in output_db's
+    metadata (as 'mother_db'/'substrate'), so that a matches row can be
+    traced back to its source mother-db row, and refine.py can find the
+    substrate again, without separately tracking either path.
     """
     print(f'\nMatching {mother_db} against {substrate}...')
 
@@ -185,7 +185,10 @@ def match_database(
     db = connect(mother_db)
     newdb = connect(db_path, append=do_restart)
     csv_writer = CsvWriter(csv_path, append=do_restart)
-    newdb.metadata = {'mother_db': os.path.abspath(mother_db)}
+    newdb.metadata = {
+        'mother_db': os.path.abspath(mother_db),
+        'substrate': os.path.abspath(substrate),
+    }
 
     substrate_atoms = read(substrate)
 
@@ -212,15 +215,16 @@ def match_database(
     )
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        'mother_db',
-        help='path to the mother database'
-    )
+def add_arguments(parser):
+    """Add match_database's CLI arguments to parser (shared by this file's
+    own __main__ block and by cli.py's `dbm match` subcommand)."""
     parser.add_argument(
         'substrate',
         help='path to the substrate structure file'
+    )
+    parser.add_argument(
+        'mother_db',
+        help='path to the mother database'
     )
     parser.add_argument(
         '--max-substrate-index', type=int, default=config.match.max_sub_index,
@@ -253,11 +257,15 @@ if __name__ == '__main__':
             '(default: always start from the beginning)'
         )
     )
-    args = parser.parse_args()
+    return parser
 
+
+def main(args):
+    """Run match_database from a parsed add_arguments() namespace -- shared
+    by this file's own __main__ block and by cli.py's `dbm match`."""
     match_database(
-        args.mother_db,
         args.substrate,
+        args.mother_db,
         args.max_substrate_index,
         args.max_film_index,
         args.max_strain,
@@ -266,3 +274,9 @@ if __name__ == '__main__':
         args.output_csv,
         args.restart,
     )
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    add_arguments(parser)
+    main(parser.parse_args())

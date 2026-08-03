@@ -10,7 +10,7 @@ databases](https://docs.ase-lib.org/ase/db/db.html) and CSV files (`refine.py`
 writes only a database, per material):
 
 ```
-mother_db + substrate  --match.py -->  matches db/csv  --score.py -->  scores db/csv  --refine.py -->  <formula>-<cod_id>/interfaces.db
+substrate + mother_db  --match.py -->  matches db/csv  --score.py -->  scores db/csv  --refine.py -->  <formula>-<cod_id>/interfaces.db
 ```
 
 - **`match.py`** scans every structure in the mother database against the
@@ -87,6 +87,7 @@ pip install matscipy scikit-opt
 
 ```bash
 python3 -c "import db_ogre_match, OgreInterface; print('OK')"
+dbm --help
 pytest
 ```
 
@@ -120,8 +121,8 @@ from db_ogre_match import match_database
 from db_ogre_match.score import score_materials
 
 match_database(
-    mother_db='mother.db',
     substrate='substrate.cif',
+    mother_db='mother.db',
     max_substrate_index=1,
     max_film_index=1,
     max_strain=0.05,
@@ -147,10 +148,9 @@ yields, not sorted by score.
 Refining a single material's matches, once it's been scored:
 
 ```python
-from refine import refine_material
+from db_ogre_match.refine import refine_material
 
 refine_material(
-    substrate='substrate.cif',
     cod_id=2300704,
     scores_db='db/scores.db',
 )
@@ -160,22 +160,40 @@ refine_material(
 per substrate/film termination combination of each match `score.py` selected
 for that material, plus one plot per match and one PES/z-shift plot pair per
 combination -- see `refine.py`'s module docstring for the full folder layout.
-`matches_db` defaults to `None`, which reads the matches db's path from
-`scores_db`'s own metadata (recorded there by `score_materials`) instead of
-requiring it to be passed/tracked separately; pass `matches_db` explicitly
-to override.
+Both `substrate` and `matches_db` default to `None`, which reads them from
+`scores_db`'s own metadata (forwarded there by `score_materials` from
+`match_database`) instead of requiring them to be passed/tracked separately;
+pass either explicitly to override.
 
 ### From the command line
 
+Installing the package (see Installation above) also installs a `dbm`
+console app, with one subcommand per stage:
+
 ```bash
-python match.py mother.db substrate.cif --max-area 500 -o matches.db --output-csv matches.csv
-python score.py db/matches.db -o scores.db --output-csv scores.csv
-python refine.py substrate.cif 2300704
+dbm match substrate.cif mother.db --max-area 500 -o matches.db --output-csv matches.csv
+dbm score db/matches.db -o scores.db --output-csv scores.csv
+dbm refine 2300704
 ```
 
-Run `python match.py --help` / `python score.py --help` / `python refine.py
---help` for the full list of options (miller index cutoffs, strain/area
-tolerances, score weights, slab layers/vacuum/interfacial-distance, ...).
+Each stage also still runs standalone, with identical flags -- note
+`match.py`'s positional order is `substrate` then `mother_db`, same as
+`dbm match`'s:
+
+```bash
+python match.py substrate.cif mother.db --max-area 500 -o matches.db --output-csv matches.csv
+python score.py db/matches.db -o scores.db --output-csv scores.csv
+python refine.py 2300704
+```
+
+`refine`'s substrate/matches db are read from `--scores-db`'s own metadata
+by default (see "As a library" above); pass `--substrate`/`--matches-db` to
+override either.
+
+Run `dbm --help` / `dbm <stage> --help` (or equivalently `python
+<stage>.py --help`) for the full list of options (miller index cutoffs,
+strain/area tolerances, score weights, slab layers/vacuum/interfacial-distance,
+...) -- both forms share the exact same argument definitions.
 
 ### Resuming a long matching run
 
@@ -240,6 +258,7 @@ values in `tests/test_score.py`, without touching disk.
 | `match.py` | matching stage: `match_database`, the CLI, checkpoint/restart |
 | `score.py` | scoring stage: `score_materials`, the CLI |
 | `refine.py` | refinement stage: `refine_material`, the CLI |
+| `cli.py` | the `dbm` console app -- `match`/`score`/`refine` subcommands |
 | `ogre_custom.py` | `OgreInterface.MillerSearch` subclass used by `match.py`, plus the closed-form `Interface` reconstruction used by `refine.py` |
 | `config.py` | shared tunable defaults for all three stages |
 | `utils.py` | `db_to_csv`, a standalone db -> CSV dump helper |

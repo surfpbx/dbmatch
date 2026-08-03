@@ -49,3 +49,8 @@ def test_match_then_score_reproduces_golden_scores(tmp_path, monkeypatch):
 
     for row in fresh_db.select():
         assert result_tuple(row) == result_tuple(golden_rows[row.cod_id])
+
+    # match_database's substrate path is forwarded through score_materials
+    # into the scores db's own metadata, so refine.py can find it without
+    # being told separately (see refine.substrate_from_scores_db).
+    assert fresh_db.metadata['substrate'] == str((DATA_DIR / 'CdSe.cif').resolve())

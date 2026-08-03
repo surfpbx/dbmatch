@@ -11,6 +11,11 @@ dependencies = [
     "tqdm",
 ]
 
+[project.scripts]
+# dbm dispatches to match.py/score.py/refine.py's own add_arguments/main --
+# see cli.py's module docstring for why the dispatch is two-phase/lazy.
+dbm = "db_ogre_match.cli:main"
+
 [tool.setuptools]
 packages = ["db_ogre_match"]
 package-dir = {"db_ogre_match" = "."}

@@ -187,7 +187,10 @@ def score_materials(
     matches_db's absolute path is recorded in output_db's metadata (as
     'matches_db'), so that a material's selected_match_ids can later be
     resolved back to their source rows without having to separately track
-    which matches_db a given scores_db came from.
+    which matches_db a given scores_db came from. matches_db's own
+    'substrate' metadata (recorded there by match_database), if present, is
+    forwarded to output_db's metadata too, so refine.py can find the
+    substrate directly from a scores db alone.
     """
     print(f'\nScoring materials from {matches_db}...')
 
@@ -209,7 +212,10 @@ def score_materials(
     os.makedirs('db', exist_ok=True)
     csv_writer = CsvWriter(os.path.join('csv', output_csv), append=False)
     newdb = connect(os.path.join('db', output_db), append=False)
-    newdb.metadata = {'matches_db': os.path.abspath(matches_db)}
+    metadata = {'matches_db': os.path.abspath(matches_db)}
+    if 'substrate' in src_db.metadata:
+        metadata['substrate'] = src_db.metadata['substrate']
+    newdb.metadata = metadata
 
     for rows in tqdm(grouped.values()):
         # static per-material properties, taken from the first match row
@@ -241,8 +247,9 @@ def score_materials(
     )
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
+def add_arguments(parser):
+    """Add score_materials's CLI arguments to parser (shared by this file's
+    own __main__ block and by cli.py's `dbm score` subcommand)."""
     parser.add_argument(
         'matches_db',
         help='path to the matches database'
@@ -267,8 +274,12 @@ if __name__ == '__main__':
         '--w-comp', type=float, default=config.score.w_comp,
         help='weight of the chemistry-compatibility score component (default: %(default)s)'
     )
-    args = parser.parse_args()
+    return parser
 
+
+def main(args):
+    """Run score_materials from a parsed add_arguments() namespace -- shared
+    by this file's own __main__ block and by cli.py's `dbm score`."""
     score_materials(
         args.matches_db,
         args.output_csv,
@@ -277,3 +288,9 @@ if __name__ == '__main__':
         w_sg=args.w_sg,
         w_comp=args.w_comp,
     )
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    add_arguments(parser)
+    main(parser.parse_args())

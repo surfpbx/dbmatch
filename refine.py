@@ -76,17 +76,32 @@ def selected_matches(scores_db, cod_id, matches_db=None):
     return [matches.get(id=i) for i in match_ids]
 
 
+def substrate_from_scores_db(scores_db):
+    """The fixed substrate structure path recorded in scores_db's own
+    metadata -- forwarded there by score_materials from matches_db's
+    metadata, itself recorded by match_database."""
+    scores = connect(scores_db)
+    scores.count()  # metadata is only readable after some query
+    return scores.metadata['substrate']
+
+
 def refine_material(
-    substrate,
     cod_id,
     scores_db,
+    substrate=None,
     matches_db=None,
     layers=config.refine.layers,
     vacuum=config.refine.vacuum,
     interfacial_distance=config.refine.interfacial_distance,
 ):
+    """If substrate isn't given, it's read from scores_db's own metadata
+    (see substrate_from_scores_db), the same way matches_db defaults from
+    scores_db's metadata in selected_matches."""
     matches = selected_matches(scores_db, cod_id, matches_db)
     reduced_formula = matches[0].reduced_formula
+
+    if substrate is None:
+        substrate = substrate_from_scores_db(scores_db)
 
     root = f'{reduced_formula}-{cod_id}'
     os.makedirs(root, exist_ok=True)
@@ -187,13 +202,20 @@ def refine_material(
     return root
 
 
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('substrate', help='path to the substrate structure file')
+def add_arguments(parser):
+    """Add refine_material's CLI arguments to parser (shared by this file's
+    own __main__ block and by cli.py's `dbm refine` subcommand)."""
     parser.add_argument('cod_id', type=int, help="a material's cod_id, as found in the scores database")
     parser.add_argument(
         '--scores-db', default=os.path.join('db', config.score.output_db),
         help='path to the scores database (default: %(default)s)'
+    )
+    parser.add_argument(
+        '--substrate', default=None,
+        help=(
+            "path to the substrate structure file (default: read from the "
+            "scores database's own metadata, as recorded there by score.py)"
+        )
     )
     parser.add_argument(
         '--matches-db', default=None,
@@ -207,14 +229,24 @@ if __name__ == '__main__':
     parser.add_argument(
         '--interfacial-distance', type=float, default=config.refine.interfacial_distance
     )
-    args = parser.parse_args()
+    return parser
 
+
+def main(args):
+    """Run refine_material from a parsed add_arguments() namespace -- shared
+    by this file's own __main__ block and by cli.py's `dbm refine`."""
     refine_material(
-        args.substrate,
         args.cod_id,
         args.scores_db,
+        args.substrate,
         args.matches_db,
         layers=args.layers,
         vacuum=args.vacuum,
         interfacial_distance=args.interfacial_distance,
     )
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    add_arguments(parser)
+    main(parser.parse_args())

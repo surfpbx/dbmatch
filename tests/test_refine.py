@@ -5,7 +5,12 @@ from ase.db import connect
 from unittest.mock import MagicMock
 
 from db_ogre_match import config
-from db_ogre_match.refine import _sanitize_hkl, _z_shift_range, selected_matches
+from db_ogre_match.refine import (
+    _sanitize_hkl,
+    _z_shift_range,
+    selected_matches,
+    substrate_from_scores_db,
+)
 
 
 def test_sanitize_hkl_strips_commas():
@@ -60,6 +65,14 @@ def test_selected_matches_reads_matches_db_from_scores_db_metadata_by_default(tm
     result = selected_matches(str(tmp_path / 'scores.db'), 42)
 
     assert [row.tag for row in result] == ['a', 'b']
+
+
+def test_substrate_from_scores_db_reads_metadata(tmp_path):
+    scores_db = connect(str(tmp_path / 'scores.db'))
+    scores_db.write(Atoms('H'), cod_id=42, selected_match_ids='1;2')
+    scores_db.metadata = {'matches_db': 'irrelevant.db', 'substrate': '/some/substrate.cif'}
+
+    assert substrate_from_scores_db(str(tmp_path / 'scores.db')) == '/some/substrate.cif'
 
 
 def test_selected_matches_propagates_keyerror_for_unknown_cod_id(tmp_path):
