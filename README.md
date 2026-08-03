@@ -219,11 +219,16 @@ of them per-call as a keyword argument, or per-run via the CLI flags.
 pytest
 ```
 
-Runs against the small fixtures in `tests/data/`, including a golden-
-fixture comparison (`test_run_matching_data.py`) that re-runs the real
-`MillerSearch` scan and checks it against `tests/data/test-matches.db`.
-`score.py`'s scoring model itself is checked directly against known
-total_score values in `tests/test_score.py`, without touching disk.
+Runs against the small fixtures in `tests/data/`, including golden-fixture
+comparisons that re-run real code and diff the result against a checked-in
+db: `test_run_matching_data.py` re-runs the `MillerSearch` scan against
+`tests/data/test-matches.db`, `test_ogre_custom.py` checks that
+`interface_from_row`'s closed-form reconstruction matches
+`InterfaceGenerator`'s own search, and `test_workflow_data.py` runs the
+full `match_database` -> `score_materials` workflow and diffs the result
+against `tests/data/test-scores.db`, material by material. `score.py`'s
+scoring model itself is also checked directly against known total_score
+values in `tests/test_score.py`, without touching disk.
 
 ## Project layout
 
