@@ -43,9 +43,23 @@ def test_selected_matches_returns_rows_in_selected_match_ids_order(tmp_path):
     scores_db = connect(str(tmp_path / 'scores.db'))
     scores_db.write(Atoms('H'), cod_id=42, selected_match_ids='3;1')
 
-    result = selected_matches(str(tmp_path / 'matches.db'), str(tmp_path / 'scores.db'), 42)
+    result = selected_matches(str(tmp_path / 'scores.db'), 42, str(tmp_path / 'matches.db'))
 
     assert [row.tag for row in result] == ['c', 'a']
+
+
+def test_selected_matches_reads_matches_db_from_scores_db_metadata_by_default(tmp_path):
+    matches_db = connect(str(tmp_path / 'matches.db'))
+    matches_db.write(Atoms('H'), tag='a')  # id=1
+    matches_db.write(Atoms('H'), tag='b')  # id=2
+
+    scores_db = connect(str(tmp_path / 'scores.db'))
+    scores_db.write(Atoms('H'), cod_id=42, selected_match_ids='1;2')
+    scores_db.metadata = {'matches_db': str(tmp_path / 'matches.db')}
+
+    result = selected_matches(str(tmp_path / 'scores.db'), 42)
+
+    assert [row.tag for row in result] == ['a', 'b']
 
 
 def test_selected_matches_propagates_keyerror_for_unknown_cod_id(tmp_path):
@@ -56,4 +70,4 @@ def test_selected_matches_propagates_keyerror_for_unknown_cod_id(tmp_path):
     scores_db.write(Atoms('H'), cod_id=42, selected_match_ids='1;2')
 
     with pytest.raises(KeyError):
-        selected_matches(str(tmp_path / 'matches.db'), str(tmp_path / 'scores.db'), 999)
+        selected_matches(str(tmp_path / 'scores.db'), 999, str(tmp_path / 'matches.db'))

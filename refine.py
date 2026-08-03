@@ -59,11 +59,18 @@ def _z_shift_range(matcher, lower=config.refine.z_shift_min, n_points=config.ref
     return np.linspace(lower, upper, n_points)
 
 
-def selected_matches(matches_db, scores_db, cod_id):
-    """The matches-db rows score.py picked as best-per-facet for cod_id."""
+def selected_matches(scores_db, cod_id, matches_db=None):
+    """The matches-db rows score.py picked as best-per-facet for cod_id.
+
+    If matches_db isn't given, it's read from scores_db's own metadata
+    (recorded there by score_materials), so a scores db is enough on its
+    own to find its way back to the matches it came from."""
     scores = connect(scores_db)
     scored = scores.get(cod_id=cod_id)
     match_ids = [int(i) for i in scored.selected_match_ids.split(';')]
+
+    if matches_db is None:
+        matches_db = scores.metadata['matches_db']
 
     matches = connect(matches_db)
     return [matches.get(id=i) for i in match_ids]
@@ -72,13 +79,13 @@ def selected_matches(matches_db, scores_db, cod_id):
 def refine_material(
     substrate,
     cod_id,
-    matches_db,
     scores_db,
+    matches_db=None,
     layers=config.refine.layers,
     vacuum=config.refine.vacuum,
     interfacial_distance=config.refine.interfacial_distance,
 ):
-    matches = selected_matches(matches_db, scores_db, cod_id)
+    matches = selected_matches(scores_db, cod_id, matches_db)
     reduced_formula = matches[0].reduced_formula
 
     root = f'{reduced_formula}-{cod_id}'
@@ -185,12 +192,15 @@ if __name__ == '__main__':
     parser.add_argument('substrate', help='path to the substrate structure file')
     parser.add_argument('cod_id', type=int, help="a material's cod_id, as found in the scores database")
     parser.add_argument(
-        '--matches-db', default=os.path.join('db', config.match.output_db),
-        help='path to the matches database (default: %(default)s)'
-    )
-    parser.add_argument(
         '--scores-db', default=os.path.join('db', config.score.output_db),
         help='path to the scores database (default: %(default)s)'
+    )
+    parser.add_argument(
+        '--matches-db', default=None,
+        help=(
+            "path to the matches database (default: read from the scores "
+            "database's own metadata, as recorded there by score.py)"
+        )
     )
     parser.add_argument('--layers', type=int, default=config.refine.layers)
     parser.add_argument('--vacuum', type=float, default=config.refine.vacuum)
@@ -202,8 +212,8 @@ if __name__ == '__main__':
     refine_material(
         args.substrate,
         args.cod_id,
-        args.matches_db,
         args.scores_db,
+        args.matches_db,
         layers=args.layers,
         vacuum=args.vacuum,
         interfacial_distance=args.interfacial_distance,

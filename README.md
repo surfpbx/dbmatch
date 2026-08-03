@@ -152,7 +152,6 @@ from refine import refine_material
 refine_material(
     substrate='substrate.cif',
     cod_id=2300704,
-    matches_db='db/matches.db',
     scores_db='db/scores.db',
 )
 ```
@@ -161,6 +160,10 @@ refine_material(
 per substrate/film termination combination of each match `score.py` selected
 for that material, plus one plot per match and one PES/z-shift plot pair per
 combination -- see `refine.py`'s module docstring for the full folder layout.
+`matches_db` defaults to `None`, which reads the matches db's path from
+`scores_db`'s own metadata (recorded there by `score_materials`) instead of
+requiring it to be passed/tracked separately; pass `matches_db` explicitly
+to override.
 
 ### From the command line
 
