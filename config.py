@@ -22,9 +22,9 @@ _major_facets_by_bravais = {
     'TRG': ('0,0,1', '0,1,0', '1,1,0'),     # trigonal
 }
 
-# ----------------------
+# ---------------------
 # Scoring stage options
-# ----------------------
+# ---------------------
 score = SimpleNamespace(
     output_db='scores.db',         # output database filename, written under 'db/'
     output_csv='scores.csv',       # output CSV filename, written under 'csv/'
@@ -45,9 +45,9 @@ score = SimpleNamespace(
     },
 )
 
-# -----------------------
+# ------------------------
 # Refinement stage options
-# -----------------------
+# ------------------------
 refine = SimpleNamespace(
     layers=5,                 # number of atomic layers in each generated surface slab
     vacuum=10.0,               # vacuum padding (Angstrom) around each generated surface slab

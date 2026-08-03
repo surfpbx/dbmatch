@@ -171,14 +171,15 @@ Installing the package (see Installation above) also installs a `dbm`
 console app, with one subcommand per stage:
 
 ```bash
+# match the substrate on the whole mother database, with custom options
 dbm match substrate.cif mother.db --max-area 500 -o matches.db --output-csv matches.csv
+# score all materials based on match quality
 dbm score db/matches.db -o scores.db --output-csv scores.csv
+# energetical refinement of the matches of COD entry 2300704
 dbm refine 2300704
 ```
 
-Each stage also still runs standalone, with identical flags -- note
-`match.py`'s positional order is `substrate` then `mother_db`, same as
-`dbm match`'s:
+Each stage also still runs standalone, with identical flags:
 
 ```bash
 python match.py substrate.cif mother.db --max-area 500 -o matches.db --output-csv matches.csv

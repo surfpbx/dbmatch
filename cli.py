@@ -12,9 +12,9 @@ deps) -- dbm match/dbm score must never trigger that import.
 import argparse
 
 _SUBCOMMAND_HELP = {
-    'match': "match every structure in a mother database against a substrate",
-    'score': "score matched materials by geometric/space-group/chemistry compatibility",
-    'refine': "energetically refine a material's selected match",
+        'match': "match every structure in a mother database against a substrate. For options, check `dbm match --help`",
+        'score': "score matched materials by geometric/space-group/chemistry compatibility. For options, check `dbm score --help`",
+        'refine': "energetically refine a material's selected match. For options, check `dbm refine --help`",
 }
 
 
@@ -42,7 +42,7 @@ def main(argv=None):
     parser and run it against the leftover argv.
     """
     parser = argparse.ArgumentParser(
-        prog='dbm', description='db-ogre-match pipeline: match -> score -> refine. \nFor specific stage (e.g. score) help, run `dbm score --help`',
+        prog='dbm', description='db-ogre-match pipeline: match -> score -> refine',
     )
     subparsers = parser.add_subparsers(dest='command', required=True)
     for name, help_text in _SUBCOMMAND_HELP.items():
