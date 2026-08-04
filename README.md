@@ -117,7 +117,7 @@ and scores output. `tests/data/test-mother.db` is a small worked example.
 ### As a library
 
 ```python
-from db_ogre_match import match_database
+from db_ogre_match.match import match_database
 from db_ogre_match.score import score_materials
 
 match_database(
@@ -207,14 +207,17 @@ rerun from scratch (a few ms per material; see the module docstring in
 
 ### Full example
 
-`example/run_example.py` runs the whole pipeline end to end against the
-`tests/data/` fixtures (symlinked in as `mother-dataset.db`/
-`substrate.cif`):
+`example/run_example.py` runs the whole pipeline end to end -- match, score,
+*and* refine -- against the `tests/data/` fixtures (symlinked in as
+`mother-dataset.db`/`substrate.cif`):
 
 ```bash
 cd example
 python run_example.py
 ```
+
+The refine step needs `matscipy`/`scikit-opt` installed too (see
+Installation above).
 
 ## Configuration
 

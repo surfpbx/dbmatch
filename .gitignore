@@ -8,6 +8,10 @@ db/
 csv/
 *.checkpoint
 
+# refine.py's <reduced_formula>-<cod_id>/ output, for run_example.py's own
+# refine_material(cod_id=2300704, ...) call
+example/TeMn-2300704/
+
 tests/data/matches.db
 
 CLAUDE.md
