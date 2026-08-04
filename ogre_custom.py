@@ -41,6 +41,17 @@ HEX_INDS = [
     [1, 1, 1],
 ]
 
+# the exact keys of each per-match result dict run_scan below writes to a
+# matches-db row -- kept in sync with that dict literal by hand. score.py
+# uses this to strip match.py's own generated columns back out before
+# carrying a matches-db row's kvp through into scores_db/csv, so only the
+# mother database's own keys (plus score.py's own newly generated ones)
+# end up there.
+MATCH_RESULT_KEYS = (
+    'area', 'strain', 'sub_hkl', 'flm_hkl',
+    'sub_transform', 'flm_transform', 'n_sub_reps', 'n_flm_reps',
+)
+
 
 def transform_to_str(array):
     coefs_2D = array[:2, :2].flatten()

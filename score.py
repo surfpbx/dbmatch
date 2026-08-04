@@ -22,6 +22,7 @@ import warnings
 from ase.db import connect
 from db_ogre_match import config
 from db_ogre_match.match import CsvWriter
+from db_ogre_match.ogre_custom import MATCH_RESULT_KEYS
 from tqdm import tqdm
 
 
@@ -218,8 +219,11 @@ def score_materials(
     newdb.metadata = metadata
 
     for rows in tqdm(grouped.values()):
-        # static per-material properties, taken from the first match row
-        mat = dict(rows[0])
+        # static per-material properties, taken from the first match row --
+        # excluding that row's own per-match fields (MATCH_RESULT_KEYS),
+        # which describe one particular facet pairing, not the material
+        # itself, and belong only in matches_db
+        mat = {k: v for k, v in rows[0].items() if k not in MATCH_RESULT_KEYS}
 
         mat.update(
             geom_score_for_material(
