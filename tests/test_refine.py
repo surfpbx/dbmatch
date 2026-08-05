@@ -2,10 +2,11 @@ import numpy as np
 import pytest
 from ase import Atoms
 from ase.db import connect
-from unittest.mock import MagicMock
+from pymatgen.core import Lattice, Structure
+from pymatgen.core.periodic_table import Element
 
-from db_ogre_match import config
 from db_ogre_match.refine import (
+    _contact_distance,
     _sanitize_hkl,
     _z_shift_range,
     cod_ids_for_selection,
@@ -19,25 +20,37 @@ def test_sanitize_hkl_strips_commas():
     assert _sanitize_hkl('0,0,1') == '001'
 
 
-def test_z_shift_range_floors_upper_bound_at_5_when_max_z_is_small():
-    matcher = MagicMock(_get_max_z=MagicMock(return_value=1.0))
-    result = _z_shift_range(matcher)
-    expected = np.linspace(config.refine.z_shift_min, 5.0, config.refine.z_shift_n_points)
-    assert np.array_equal(result, expected)
+def _structure_at_z(species_zs):
+    """A pymatgen Structure with one atom per (symbol, z) pair, all at
+    (x=5, y=5) in a large cubic box, for testing z-coordinate-picking logic
+    in isolation from real slab geometry."""
+    lattice = Lattice.cubic(20.0)
+    species = [symbol for symbol, _ in species_zs]
+    coords = [[5.0, 5.0, z] for _, z in species_zs]
+    return Structure(lattice, species, coords, coords_are_cartesian=True)
 
 
-def test_z_shift_range_scales_with_max_z_when_larger_than_the_floor():
-    matcher = MagicMock(_get_max_z=MagicMock(return_value=10.0))
-    result = _z_shift_range(matcher)
-    expected = np.linspace(config.refine.z_shift_min, 15.0, config.refine.z_shift_n_points)
-    assert np.array_equal(result, expected)
+def test_contact_distance_picks_substrate_top_atom_and_film_bottom_atom():
+    """D should come from the substrate's topmost atom (Se, not Cd -- Cd is
+    lower) and the film's bottommost atom (Te, not Mn -- Mn is higher),
+    regardless of each atom's position in its own species list."""
+    sub_structure = _structure_at_z([('Se', 2.0), ('Cd', 0.0)])
+    film_structure = _structure_at_z([('Mn', 7.0), ('Te', 5.0)])
+
+    D = _contact_distance(sub_structure, film_structure)
+
+    expected = float(Element('Se').average_ionic_radius) + float(Element('Te').average_ionic_radius)
+    assert D == pytest.approx(expected)
 
 
-def test_z_shift_range_respects_custom_lower_and_n_points():
-    matcher = MagicMock(_get_max_z=MagicMock(return_value=1.0))
-    result = _z_shift_range(matcher, lower=0.5, n_points=5)
-    expected = np.linspace(0.5, 5.0, 5)
-    assert np.array_equal(result, expected)
+def test_z_shift_range_scans_half_to_twice_the_contact_distance():
+    result = _z_shift_range(D=2.0, n_points=5)
+    assert np.array_equal(result, np.linspace(1.0, 4.0, 5))
+
+
+def test_z_shift_range_respects_custom_n_points():
+    result = _z_shift_range(D=2.0, n_points=7)
+    assert len(result) == 7
 
 
 def test_selected_matches_returns_rows_in_selected_match_ids_order(tmp_path):

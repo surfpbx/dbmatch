@@ -202,7 +202,7 @@ Each stage also still runs standalone, with identical flags:
 ```bash
 python match.py substrate.cif mother.db --max-area 500 -o matches.db --output-csv matches.csv
 python score.py db/matches.db -o scores.db --output-csv scores.csv
-python refine.py cod_id=2300704
+python refine.py 'cod_id=2300704'   # we recommend using quotes, especially for multiple-condition selections
 ```
 
 `refine`'s substrate/matches db are read from `--scores-db`'s own metadata
@@ -211,7 +211,7 @@ override either.
 
 Run `dbm --help` / `dbm <stage> --help` (or equivalently `python
 <stage>.py --help`) for the full list of options (miller index cutoffs,
-strain/area tolerances, score weights, slab layers/vacuum/interfacial-distance,
+strain/area tolerances, score weights, slab layers/vacuum,
 ...) -- both forms share the exact same argument definitions.
 
 ### Resuming a long matching run
@@ -248,8 +248,11 @@ three namespaces:
 - `config.score` -- score weights, facet-tier values, the
   substrate-compatible space groups/elements/major-facets, and default
   output filenames for `score.py`.
-- `config.refine` -- slab layers/vacuum, starting interfacial distance, and
-  the interfacial-distance scan bounds for `refine.py`.
+- `config.refine` -- slab layers/vacuum, and the number of points sampled
+  in the interfacial-distance scan for `refine.py` (the scan's bounds, and
+  the starting interfacial distance itself, are derived per termination
+  combo from the ionic radii of the two atoms facing each other across the
+  interface -- see `refine._contact_distance`/`_z_shift_range`).
 
 `match_database`/`match.py`, `score_materials`/`score.py`, and
 `refine_material`/`refine.py` all read their keyword/CLI defaults straight

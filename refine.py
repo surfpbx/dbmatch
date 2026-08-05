@@ -51,14 +51,36 @@ def _sanitize_hkl(hkl):
     return hkl.replace(',', '')
 
 
-def _z_shift_range(matcher, lower=config.refine.z_shift_min, n_points=config.refine.z_shift_n_points):
-    """Interfacial distances to scan. Wider than optimizePSO's own default
-    z_bounds (see BaseSurfaceMatcher._get_max_z/optimizePSO) -- several
-    combos were landing right on that narrower upper edge, meaning their
-    true optimum was being cut off."""
-    max_z = matcher._get_max_z()
-    upper = max(5.0, 1.5 * max_z)
-    return np.linspace(lower, upper, n_points)
+def _contact_distance(sub_structure, film_structure):
+    """The natural ionic contact distance between the two atoms that will
+    actually face each other across the interface: the substrate's topmost
+    atom and the film's bottommost atom (each structure in its own
+    z-coordinate frame -- substrate slabs and film slabs are both generated
+    independently before being merged into an interface, but merging only
+    translates each rigid slab along z, so the atom picked out here is the
+    same one that ends up facing the interface after merging). D is the sum
+    of their pymatgen Element.average_ionic_radius -- used both as the
+    interface's starting interfacial_distance and as the basis for the
+    z-shift scan range (see _z_shift_range)."""
+    sub_z = sub_structure.cart_coords[:, -1]
+    film_z = film_structure.cart_coords[:, -1]
+
+    sub_radius = sub_structure[sub_z.argmax()].specie.average_ionic_radius
+    film_radius = film_structure[film_z.argmin()].specie.average_ionic_radius
+
+    return float(sub_radius) + float(film_radius)
+
+
+def _z_shift_range(D, n_points=config.refine.z_shift_n_points):
+    """Interfacial distances to scan around the natural ionic contact
+    distance D (see _contact_distance): (0.5*D, 2*D).
+
+    Replaces OgreInterface's own _get_max_z bound (2x the largest covalent
+    radius over every element in the whole interface, substrate and film
+    alike) -- that heuristic ignored which atoms were actually at the
+    interface and was cutting several combos' true PES optimum off at its
+    narrow upper edge."""
+    return np.linspace(0.5 * D, 2 * D, n_points)
 
 
 def selected_matches(scores_db, cod_id, matches_db=None):
@@ -104,7 +126,6 @@ def refine_material(
     matches_db=None,
     layers=config.refine.layers,
     vacuum=config.refine.vacuum,
-    interfacial_distance=config.refine.interfacial_distance,
 ):
     """selection is any ase db query string db.select() accepts (e.g.
     'total_score>0.7', 'cod_id=2300704'); every cod_id it resolves to in
@@ -114,6 +135,7 @@ def refine_material(
 
     Returns the list of root folders written, one per refined cod_id."""
     cod_ids = cod_ids_for_selection(scores_db, selection)
+    print(f"\nRefining {len(cod_ids)} material(s) matching '{selection}' from {scores_db}...")
 
     if substrate is None:
         substrate = substrate_from_scores_db(scores_db)
@@ -123,19 +145,20 @@ def refine_material(
     for cod_id in cod_ids:
         roots.append(
             _refine_one_material(
-                cod_id, scores_db, substrate_atoms, matches_db,
-                layers, vacuum, interfacial_distance,
+                cod_id, scores_db, substrate_atoms, matches_db, layers, vacuum,
             )
         )
     return roots
 
 
 def _refine_one_material(
-    cod_id, scores_db, substrate_atoms, matches_db,
-    layers, vacuum, interfacial_distance,
+    cod_id, scores_db, substrate_atoms, matches_db, layers, vacuum,
 ):
     matches = selected_matches(scores_db, cod_id, matches_db)
     reduced_formula = matches[0].reduced_formula
+    nmatches = len(matches)
+
+    print(f'\n{reduced_formula}-{cod_id}: found {nmatches} selected match(es)')
 
     root = f'{reduced_formula}-{cod_id}'
     os.makedirs(root, exist_ok=True)
@@ -143,7 +166,7 @@ def _refine_one_material(
     # interfaces.db, not accumulate duplicate rows alongside the old ones
     results_db = connect(os.path.join(root, 'interfaces.db'), append=False)
 
-    for match in tqdm(matches):
+    for i, match in enumerate(matches):
         film_atoms = match.toatoms()
 
         # match.py's own Matcher scans with refine_structure=False -- must
@@ -170,7 +193,7 @@ def _refine_one_material(
         os.makedirs(match_dir, exist_ok=True)
 
         print(
-            f'match id={match.id}: {len(subs)} substrate termination(s), '
+            f'\n({i}/{nmatches}) match id={match.id}: {len(subs)} substrate termination(s), '
             f'{len(films)} film termination(s)'
         )
 
@@ -178,13 +201,21 @@ def _refine_one_material(
 
         for si, sub in enumerate(subs):
             for fi, film in enumerate(films):
+                # starting interfacial_distance from the same ionic-radii
+                # criterion as the z-shift scan below -- computed per
+                # termination combo, since different terminations expose
+                # different atoms at the surface
+                D = _contact_distance(
+                    sub.get_surface(orthogonal=True), film.get_surface(orthogonal=True)
+                )
+
                 interface_generator = InterfaceGenerator(
                     substrate=sub,
                     film=film,
                     max_strain=config.match.max_strain,
                     max_area_mismatch=config.match.max_area_mismatch,
                     max_area=config.match.max_area,
-                    interfacial_distance=interfacial_distance,
+                    interfacial_distance=D,
                     vacuum=40,
                     verbose=False,
                 )
@@ -205,7 +236,7 @@ def _refine_one_material(
                 matcher.get_optimized_structure()
 
                 matcher.run_z_shift(
-                    interfacial_distances=_z_shift_range(matcher),
+                    interfacial_distances=_z_shift_range(D),
                     output=os.path.join(combo_dir, 'z_shift.png'),
                 )
                 matcher.get_optimized_structure()
@@ -213,8 +244,7 @@ def _refine_one_material(
                 adhesion_energy, interface_energy = matcher.get_current_energy()
 
                 print(
-                    f'  sub{si}/flm{fi}: adhesion={adhesion_energy:.4f} eV/A^2, '
-                    f'interface={interface_energy:.4f} eV/A^2'
+                    f'  sub{si}/flm{fi}: Eadh={adhesion_energy:.4f} eV/A^2'
                 )
 
                 atoms = AseAtomsAdaptor.get_atoms(matcher.iface)
@@ -248,7 +278,7 @@ def add_arguments(parser):
         )
     )
     parser.add_argument(
-        '--scores-db', default=os.path.join('db', config.score.output_db),
+        '-d', '--scores-db', default=os.path.join('db', config.score.output_db),
         help='path to the scores database (default: %(default)s)'
     )
     parser.add_argument(
@@ -267,9 +297,6 @@ def add_arguments(parser):
     )
     parser.add_argument('--layers', type=int, default=config.refine.layers)
     parser.add_argument('--vacuum', type=float, default=config.refine.vacuum)
-    parser.add_argument(
-        '--interfacial-distance', type=float, default=config.refine.interfacial_distance
-    )
     return parser
 
 
@@ -283,7 +310,6 @@ def main(args):
         args.matches_db,
         layers=args.layers,
         vacuum=args.vacuum,
-        interfacial_distance=args.interfacial_distance,
     )
 
 

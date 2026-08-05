@@ -49,9 +49,9 @@ score = SimpleNamespace(
 # Refinement stage options
 # ------------------------
 refine = SimpleNamespace(
-    layers=5,                 # number of atomic layers in each generated surface slab
-    vacuum=10.0,               # vacuum padding (Angstrom) around each generated surface slab
-    interfacial_distance=3.0, # starting substrate-film separation (Angstrom) before z-shift optimization
-    z_shift_min=1.0,           # lower bound (Angstrom) of the interfacial-distance scan
-    z_shift_n_points=31,       # number of points sampled in the interfacial-distance scan
+    layers=10,                 # number of atomic layers in each generated surface slab
+    vacuum=20.0,               # vacuum padding (Angstrom) around each generated surface slab
+    z_shift_n_points=31,       # number of points sampled in the interfacial-distance scan (both the
+                               # starting interfacial_distance and the scan bounds are derived per-combo
+                               # from ionic radii -- see refine._contact_distance/_z_shift_range)
 )
