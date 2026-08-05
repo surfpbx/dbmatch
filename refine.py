@@ -1,7 +1,9 @@
-"""For one cod_id, run OgreInterface's ionic surface-matching (in-plane PES +
-z-shift) energy optimization for every substrate/film termination
-combination of every match score.py selected for that material, without
-cluttering the working directory: everything lands under a single
+"""Energetically refine every material picked out of the scores database by
+a selection string (e.g. 'total_score>0.7'), running OgreInterface's ionic
+surface-matching optimization (in-plane scan, then an interfacial-distance
+scan) on every termination combination of every match score.py selected for
+it, without cluttering the working directory: each material lands under its
+own
 
     <reduced_formula>-<cod_id>/
         interfaces.db                      # one row per termination combo:
@@ -85,8 +87,18 @@ def substrate_from_scores_db(scores_db):
     return scores.metadata['substrate']
 
 
+def cod_ids_for_selection(scores_db, selection):
+    """The cod_id of every row in scores_db matching selection -- any query
+    string db.select() accepts (e.g. 'total_score>0.7', 'bravais=HEX',
+    'cod_id=2300704') -- in the order scores_db yields them. scores_db has
+    exactly one row per material (score_materials groups matches_db by
+    cod_id before scoring), so no cod_id can repeat here."""
+    scores = connect(scores_db)
+    return [row.cod_id for row in scores.select(selection)]
+
+
 def refine_material(
-    cod_id,
+    selection,
     scores_db,
     substrate=None,
     matches_db=None,
@@ -94,20 +106,42 @@ def refine_material(
     vacuum=config.refine.vacuum,
     interfacial_distance=config.refine.interfacial_distance,
 ):
-    """If substrate isn't given, it's read from scores_db's own metadata
-    (see substrate_from_scores_db), the same way matches_db defaults from
-    scores_db's metadata in selected_matches."""
-    matches = selected_matches(scores_db, cod_id, matches_db)
-    reduced_formula = matches[0].reduced_formula
+    """selection is any ase db query string db.select() accepts (e.g.
+    'total_score>0.7', 'cod_id=2300704'); every cod_id it resolves to in
+    scores_db is refined in turn. If substrate isn't given, it's read from
+    scores_db's own metadata (see substrate_from_scores_db), the same way
+    matches_db defaults from scores_db's metadata in selected_matches.
+
+    Returns the list of root folders written, one per refined cod_id."""
+    cod_ids = cod_ids_for_selection(scores_db, selection)
 
     if substrate is None:
         substrate = substrate_from_scores_db(scores_db)
+    substrate_atoms = read(substrate)
+
+    roots = []
+    for cod_id in cod_ids:
+        roots.append(
+            _refine_one_material(
+                cod_id, scores_db, substrate_atoms, matches_db,
+                layers, vacuum, interfacial_distance,
+            )
+        )
+    return roots
+
+
+def _refine_one_material(
+    cod_id, scores_db, substrate_atoms, matches_db,
+    layers, vacuum, interfacial_distance,
+):
+    matches = selected_matches(scores_db, cod_id, matches_db)
+    reduced_formula = matches[0].reduced_formula
 
     root = f'{reduced_formula}-{cod_id}'
     os.makedirs(root, exist_ok=True)
-    results_db = connect(os.path.join(root, 'interfaces.db'))
-
-    substrate_atoms = read(substrate)
+    # append=False: re-running refine on the same material should replace
+    # interfaces.db, not accumulate duplicate rows alongside the old ones
+    results_db = connect(os.path.join(root, 'interfaces.db'), append=False)
 
     for match in tqdm(matches):
         film_atoms = match.toatoms()
@@ -205,7 +239,14 @@ def refine_material(
 def add_arguments(parser):
     """Add refine_material's CLI arguments to parser (shared by this file's
     own __main__ block and by cli.py's `dbm refine` subcommand)."""
-    parser.add_argument('cod_id', type=int, help="a material's cod_id, as found in the scores database")
+    parser.add_argument(
+        'selection',
+        help=(
+            "an ase db selection picking which cod_ids to refine, e.g. "
+            "'cod_id=2300704' or 'total_score>0.7' -- any query "
+            "db.select() accepts, resolved against the scores database"
+        )
+    )
     parser.add_argument(
         '--scores-db', default=os.path.join('db', config.score.output_db),
         help='path to the scores database (default: %(default)s)'
@@ -236,7 +277,7 @@ def main(args):
     """Run refine_material from a parsed add_arguments() namespace -- shared
     by this file's own __main__ block and by cli.py's `dbm refine`."""
     refine_material(
-        args.cod_id,
+        args.selection,
         args.scores_db,
         args.substrate,
         args.matches_db,

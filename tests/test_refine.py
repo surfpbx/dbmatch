@@ -8,6 +8,7 @@ from db_ogre_match import config
 from db_ogre_match.refine import (
     _sanitize_hkl,
     _z_shift_range,
+    cod_ids_for_selection,
     selected_matches,
     substrate_from_scores_db,
 )
@@ -73,6 +74,23 @@ def test_substrate_from_scores_db_reads_metadata(tmp_path):
     scores_db.metadata = {'matches_db': 'irrelevant.db', 'substrate': '/some/substrate.cif'}
 
     assert substrate_from_scores_db(str(tmp_path / 'scores.db')) == '/some/substrate.cif'
+
+
+def test_cod_ids_for_selection_filters_by_query(tmp_path):
+    scores_db = connect(str(tmp_path / 'scores.db'))
+    scores_db.write(Atoms('H'), cod_id=1, total_score=1.0)
+    scores_db.write(Atoms('H'), cod_id=2, total_score=0.5)
+    scores_db.write(Atoms('H'), cod_id=3, total_score=0.2)
+
+    assert cod_ids_for_selection(str(tmp_path / 'scores.db'), 'total_score>0.4') == [1, 2]
+
+
+def test_cod_ids_for_selection_with_single_cod_id_query(tmp_path):
+    scores_db = connect(str(tmp_path / 'scores.db'))
+    scores_db.write(Atoms('H'), cod_id=1, total_score=1.0)
+    scores_db.write(Atoms('H'), cod_id=2, total_score=0.5)
+
+    assert cod_ids_for_selection(str(tmp_path / 'scores.db'), 'cod_id=2') == [2]
 
 
 def test_selected_matches_propagates_keyerror_for_unknown_cod_id(tmp_path):

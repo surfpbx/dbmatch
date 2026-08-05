@@ -20,9 +20,10 @@ substrate + mother_db  --match.py -->  matches db/csv  --score.py -->  scores db
   (`cod_id`), and assigns each material a `total_score` based on how many
   facets it hits, how compatible its space group is, and whether it
   contains substrate-compatible elements.
-- **`refine.py`** takes a single material's `cod_id`, rebuilds the matches
-  `score.py` selected for it, and runs `OgreInterface`'s ionic surface
-  matching (in-plane + interfacial-distance energy optimization) over every
+- **`refine.py`** takes a scores-database selection (e.g. `total_score>0.7`),
+  and for every material it resolves to, rebuilds the matches `score.py`
+  selected for it and runs `OgreInterface`'s ionic surface matching
+  (in-plane + interfacial-distance energy optimization) over every
   substrate/film termination combination of each one.
 
 ## Installation
@@ -145,25 +146,37 @@ and writes one material at a time as it goes, rather than buffering
 everything in memory -- rows land in whatever `cod_id` order the source db
 yields, not sorted by score.
 
-Refining a single material's matches, once it's been scored:
+Refining every material a selection picks out of the scores database, once
+it's been scored:
 
 ```python
 from db_ogre_match.refine import refine_material
 
 refine_material(
-    cod_id=2300704,
+    selection='cod_id=2300704',   # or e.g. 'total_score>0.7'
     scores_db='db/scores.db',
 )
 ```
 
-`refine_material` writes `<reduced_formula>-<cod_id>/interfaces.db`, one row
-per substrate/film termination combination of each match `score.py` selected
-for that material, plus one plot per match and one PES/z-shift plot pair per
-combination -- see `refine.py`'s module docstring for the full folder layout.
-Both `substrate` and `matches_db` default to `None`, which reads them from
-`scores_db`'s own metadata (forwarded there by `score_materials` from
-`match_database`) instead of requiring them to be passed/tracked separately;
-pass either explicitly to override.
+`selection` is any query string `ase.db`'s own `select()` accepts (a single
+`cod_id`, a threshold like `total_score>0.7`, comma-combined conditions for
+AND, ...), resolved against `scores_db`. `refine_material` writes
+`<reduced_formula>-<cod_id>/interfaces.db` for each material it resolves to,
+one row per substrate/film termination combination of each match `score.py`
+selected for that material, plus one plot per match and one PES/z-shift plot
+pair per combination -- see `refine.py`'s module docstring for the full
+folder layout. It returns the list of root folders written, one per refined
+`cod_id`.
+
+See [ASE's own database documentation](https://docs.ase-lib.org/ase/db/db.html#querying)
+for the full query syntax `selection` accepts, and more generally for how to
+query/manipulate `db` files yourself (e.g. `ase db db/scores.db -s
+total_score-` to list materials sorted best-first).
+
+Both `substrate` and `matches_db` default to `None`, which reads
+them from `scores_db`'s own metadata (forwarded there by `score_materials`
+from `match_database`) instead of requiring them to be passed/tracked
+separately; pass either explicitly to override.
 
 ### From the command line
 
@@ -176,7 +189,7 @@ dbm match substrate.cif mother.db --max-area 500 -o matches.db --output-csv matc
 # score all materials based on match quality
 dbm score db/matches.db -o scores.db --output-csv scores.csv
 # energetical refinement of the matches of COD entry 2300704
-dbm refine 2300704
+dbm refine cod_id=2300704
 ```
 
 Each stage also still runs standalone, with identical flags:
@@ -184,7 +197,7 @@ Each stage also still runs standalone, with identical flags:
 ```bash
 python match.py substrate.cif mother.db --max-area 500 -o matches.db --output-csv matches.csv
 python score.py db/matches.db -o scores.db --output-csv scores.csv
-python refine.py 2300704
+python refine.py cod_id=2300704
 ```
 
 `refine`'s substrate/matches db are read from `--scores-db`'s own metadata
