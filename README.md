@@ -141,13 +141,9 @@ score_materials(
 ```
 
 Both functions create `db/` and `csv/` under the current directory if
-they don't already exist, and write output there. `score_materials` scores
-and writes one material at a time as it goes, rather than buffering
-everything in memory -- rows land in whatever `cod_id` order the source db
-yields, not sorted by score.
-
-Refining every material a selection picks out of the scores database, once
-it's been scored:
+they don't already exist, and write output there. After inspecting
+the output scores database, we can pick out materials for refinement
+based on a selection string:
 
 ```python
 from db_ogre_match.refine import refine_material
@@ -159,8 +155,17 @@ refine_material(
 ```
 
 `selection` is any query string `ase.db`'s own `select()` accepts (a single
-`cod_id`, a threshold like `total_score>0.7`, comma-combined conditions for
-AND, ...), resolved against `scores_db`. `refine_material` writes
+`cod_id`, a threshold like `total_score>0.7`, comma-combined conditions, ...),
+resolved against `scores_db`. Here's a few examples:
+
+```python
+'geom_score=1.0'                        # pick out anything with perfect geometric score
+'S,total_score>0.6'                     # anything containing sulphur and scoring higher than 0.6
+'material_class=halides,bravais=CUB'    # all cubic halides
+'n_major_facets_scored=3'               # anything that matches 3 major facets of the substrate
+```
+
+`refine_material` writes
 `<reduced_formula>-<cod_id>/interfaces.db` for each material it resolves to,
 one row per substrate/film termination combination of each match `score.py`
 selected for that material, plus one plot per match and one PES/z-shift plot
@@ -211,6 +216,7 @@ strain/area tolerances, score weights, slab layers/vacuum/interfacial-distance,
 
 ### Resuming a long matching run
 
+Lattice matching on large databases can take a few hours, so 
 `match_database`/`match.py` checkpoint after every mother-db row processed.
 Pass `restart=True` (`-r`/`--restart` on the CLI) to resume from the
 checkpoint file next to the output database instead of starting over.
