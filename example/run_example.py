@@ -8,13 +8,13 @@ optimization per termination combo), rather than the ~1-2s match/score take.
 """
 
 import os
-from db_ogre_match.match import match_database
-from db_ogre_match.score import score_materials
-from db_ogre_match.refine import refine_material
+from db_ogre_match.match import match
+from db_ogre_match.score import score
+from db_ogre_match.refine import refine
 from ase.visualize import view
 
 # Try matching the substrate (CdSe) with the 10 materials in the mother db
-match_database(
+match(
     mother_db='mother-dataset.db',
     substrate='substrate.cif',
     max_substrate_index=1,
@@ -27,7 +27,7 @@ match_database(
 )
 
 # Assign scores to the materials based on the found matches
-score_materials(
+score(
     matches_db='example_matches.db',
     output_csv='example_scores.csv',
     output_db='example_scores.db',
@@ -37,7 +37,7 @@ score_materials(
 # running "ase db example_scores.db -c +cod_id"
 
 # entry 2300704 (MnTe) has a perfect score of 1.0. Let's refine it!
-refine_material(
+refine(
     selection='cod_id=2300704',
     scores_db='example_scores.db',
 )

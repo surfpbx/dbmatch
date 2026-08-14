@@ -167,8 +167,8 @@ def selected_matches(scores_db, cod_id, matches_db=None):
     """The matches-db rows score.py picked as best-per-facet for cod_id.
 
     If matches_db isn't given, it's read from scores_db's own metadata
-    (recorded there by score_materials), so a scores db is enough on its
-    own to find its way back to the matches it came from."""
+    (recorded there by score), so a scores db is enough on its own to find
+    its way back to the matches it came from."""
     scores = connect(scores_db)
     scored = scores.get(cod_id=cod_id)
     match_ids = [int(i) for i in scored.selected_match_ids.split(';')]
@@ -182,8 +182,8 @@ def selected_matches(scores_db, cod_id, matches_db=None):
 
 def substrate_from_scores_db(scores_db):
     """The fixed substrate structure path recorded in scores_db's own
-    metadata -- forwarded there by score_materials from matches_db's
-    metadata, itself recorded by match_database."""
+    metadata -- forwarded there by score from matches_db's metadata,
+    itself recorded by match."""
     scores = connect(scores_db)
     scores.count()  # metadata is only readable after some query
     return scores.metadata['substrate']
@@ -193,13 +193,13 @@ def cod_ids_for_selection(scores_db, selection):
     """The cod_id of every row in scores_db matching selection -- any query
     string db.select() accepts (e.g. 'total_score>0.7', 'bravais=HEX',
     'cod_id=2300704') -- in the order scores_db yields them. scores_db has
-    exactly one row per material (score_materials groups matches_db by
-    cod_id before scoring), so no cod_id can repeat here."""
+    exactly one row per material (score groups matches_db by cod_id before
+    scoring), so no cod_id can repeat here."""
     scores = connect(scores_db)
     return [row.cod_id for row in scores.select(selection)]
 
 
-def refine_material(
+def refine(
     selection,
     scores_db,
     substrate=None,
@@ -394,8 +394,8 @@ def view_interface(interfaces_db, row_id):
 
 
 def add_arguments(parser):
-    """Add refine_material's CLI arguments to parser (shared by this file's
-    own __main__ block and by cli.py's `dbm refine` subcommand)."""
+    """Add refine's CLI arguments to parser (shared by this file's own
+    __main__ block and by cli.py's `dbm refine` subcommand)."""
     parser.add_argument(
         'selection', nargs='?', default=None,
         help=(
@@ -445,10 +445,10 @@ def add_arguments(parser):
 
 
 def main(args):
-    """Run refine_material from a parsed add_arguments() namespace -- shared
-    by this file's own __main__ block and by cli.py's `dbm refine`. If
-    --view is given, visualizes that interfaces.db row instead and returns
-    without running refine_material at all."""
+    """Run refine from a parsed add_arguments() namespace -- shared by this
+    file's own __main__ block and by cli.py's `dbm refine`. If --view is
+    given, visualizes that interfaces.db row instead and returns without
+    running refine at all."""
     if args.view is not None:
         view_interface(args.interfaces_db, args.view)
         return
@@ -456,7 +456,7 @@ def main(args):
     if args.selection is None:
         raise SystemExit('refine: error: selection is required unless --view is given')
 
-    refine_material(
+    refine(
         args.selection,
         args.scores_db,
         args.substrate,

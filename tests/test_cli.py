@@ -56,8 +56,8 @@ def test_dbm_score_help_does_not_import_refine(monkeypatch, capsys):
 
 def test_dbm_match_cli_takes_substrate_then_mother_db(tmp_path, monkeypatch):
     """Runs `dbm match <substrate> <mother_db> ...` through cli.main's real
-    argv parsing (not match_database(**kwargs)), so a positional-order
-    mistake in add_arguments/main would actually be caught here."""
+    argv parsing (not match(**kwargs)), so a positional-order mistake in
+    add_arguments/main would actually be caught here."""
     monkeypatch.chdir(tmp_path)
 
     cli.main([

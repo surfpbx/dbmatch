@@ -2,8 +2,8 @@ from pathlib import Path
 
 from ase.db import connect
 
-from db_ogre_match.match import match_database
-from db_ogre_match.score import score_materials
+from db_ogre_match.match import match
+from db_ogre_match.score import score
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 SCORE_KEYS = [
@@ -18,13 +18,13 @@ def result_tuple(row):
 
 
 def test_match_then_score_reproduces_golden_scores(tmp_path, monkeypatch):
-    """Runs the real match_database -> score_materials workflow (the same
-    two calls example/run_example.py makes) over tests/data/test-mother.db
-    against CdSe.cif, and diffs the resulting scores db against
+    """Runs the real match -> score workflow (the same two calls
+    example/run_example.py makes) over tests/data/test-mother.db against
+    CdSe.cif, and diffs the resulting scores db against
     tests/data/test-scores.db, material by material."""
     monkeypatch.chdir(tmp_path)
 
-    match_database(
+    match(
         mother_db=str(DATA_DIR / 'test-mother.db'),
         substrate=str(DATA_DIR / 'CdSe.cif'),
         max_substrate_index=1,
@@ -35,7 +35,7 @@ def test_match_then_score_reproduces_golden_scores(tmp_path, monkeypatch):
         output_csv='matches.csv',
         restart=False,
     )
-    score_materials(
+    score(
         matches_db='matches.db',
         output_csv='scores.csv',
         output_db='scores.db',
@@ -50,7 +50,7 @@ def test_match_then_score_reproduces_golden_scores(tmp_path, monkeypatch):
     for row in fresh_db.select():
         assert result_tuple(row) == result_tuple(golden_rows[row.cod_id])
 
-    # match_database's substrate path is forwarded through score_materials
-    # into the scores db's own metadata, so refine.py can find it without
-    # being told separately (see refine.substrate_from_scores_db).
+    # match's substrate path is forwarded through score into the scores
+    # db's own metadata, so refine.py can find it without being told
+    # separately (see refine.substrate_from_scores_db).
     assert fresh_db.metadata['substrate'] == str((DATA_DIR / 'CdSe.cif').resolve())

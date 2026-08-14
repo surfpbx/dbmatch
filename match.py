@@ -145,7 +145,7 @@ def run_matching(
     return n_matches
 
 
-def match_database(
+def match(
     substrate,
     mother_db,
     max_substrate_index,
@@ -216,8 +216,8 @@ def match_database(
 
 
 def add_arguments(parser):
-    """Add match_database's CLI arguments to parser (shared by this file's
-    own __main__ block and by cli.py's `dbm match` subcommand)."""
+    """Add match's CLI arguments to parser (shared by this file's own
+    __main__ block and by cli.py's `dbm match` subcommand)."""
     parser.add_argument(
         'substrate',
         help='path to the substrate structure file'
@@ -261,9 +261,9 @@ def add_arguments(parser):
 
 
 def main(args):
-    """Run match_database from a parsed add_arguments() namespace -- shared
-    by this file's own __main__ block and by cli.py's `dbm match`."""
-    match_database(
+    """Run match from a parsed add_arguments() namespace -- shared by this
+    file's own __main__ block and by cli.py's `dbm match`."""
+    match(
         args.substrate,
         args.mother_db,
         args.max_substrate_index,

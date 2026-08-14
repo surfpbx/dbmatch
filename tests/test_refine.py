@@ -168,14 +168,14 @@ def test_selected_matches_propagates_keyerror_for_unknown_cod_id(tmp_path):
         selected_matches(str(tmp_path / 'scores.db'), 999, str(tmp_path / 'matches.db'))
 
 
-def test_main_with_view_does_not_run_refine_material(monkeypatch):
+def test_main_with_view_does_not_run_refine(monkeypatch):
     """--view is a standalone visualization mode -- main() must dispatch to
-    view_interface and return without ever calling refine_material."""
+    view_interface and return without ever calling refine."""
     called = []
     monkeypatch.setattr(refine, 'view_interface', lambda *a, **kw: called.append((a, kw)))
     monkeypatch.setattr(
-        refine, 'refine_material',
-        lambda *a, **kw: pytest.fail('refine_material must not run when --view is given'),
+        refine, 'refine',
+        lambda *a, **kw: pytest.fail('refine must not run when --view is given'),
     )
 
     parser = argparse.ArgumentParser()

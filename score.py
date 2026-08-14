@@ -159,7 +159,7 @@ def _csv_row(mat):
     }
 
 
-def score_materials(
+def score(
     matches_db,
     output_csv,
     output_db,
@@ -189,7 +189,7 @@ def score_materials(
     'matches_db'), so that a material's selected_match_ids can later be
     resolved back to their source rows without having to separately track
     which matches_db a given scores_db came from. matches_db's own
-    'substrate' metadata (recorded there by match_database), if present, is
+    'substrate' metadata (recorded there by match), if present, is
     forwarded to output_db's metadata too, so refine.py can find the
     substrate directly from a scores db alone.
     """
@@ -256,8 +256,8 @@ def score_materials(
 
 
 def add_arguments(parser):
-    """Add score_materials's CLI arguments to parser (shared by this file's
-    own __main__ block and by cli.py's `dbm score` subcommand)."""
+    """Add score's CLI arguments to parser (shared by this file's own
+    __main__ block and by cli.py's `dbm score` subcommand)."""
     parser.add_argument(
         'matches_db',
         help='path to the matches database'
@@ -286,9 +286,9 @@ def add_arguments(parser):
 
 
 def main(args):
-    """Run score_materials from a parsed add_arguments() namespace -- shared
-    by this file's own __main__ block and by cli.py's `dbm score`."""
-    score_materials(
+    """Run score from a parsed add_arguments() namespace -- shared by this
+    file's own __main__ block and by cli.py's `dbm score`."""
+    score(
         args.matches_db,
         args.output_csv,
         args.output_db,

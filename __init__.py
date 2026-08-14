@@ -2,9 +2,9 @@ import warnings
 
 from db_ogre_match import ogre_custom
 
-# match_database/score_materials/refine_material are deliberately not
-# re-exported here -- import each from its own module
-# (db_ogre_match.match/.score/.refine). The ogre_custom import above is kept
+# match/score/refine are deliberately not re-exported here -- import each
+# from its own module (db_ogre_match.match/.score/.refine). The
+# ogre_custom import above is kept
 # only for its side effect: it's what actually pulls in spglib (via
 # OgreInterface's miller/surfaces/lattice_match submodules).
 #

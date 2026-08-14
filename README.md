@@ -118,10 +118,10 @@ and scores output. `tests/data/test-mother.db` is a small worked example.
 ### As a library
 
 ```python
-from db_ogre_match.match import match_database
-from db_ogre_match.score import score_materials
+from db_ogre_match.match import match
+from db_ogre_match.score import score
 
-match_database(
+match(
     substrate='substrate.cif',
     mother_db='mother.db',
     max_substrate_index=1,
@@ -133,7 +133,7 @@ match_database(
     restart=False,
 )
 
-score_materials(
+score(
     matches_db='matches.db',
     output_csv='scores.csv',     # written to the current directory
     output_db='scores.db',       # written to the current directory
@@ -144,9 +144,9 @@ After inspecting the output scores database, we can pick out materials for
 refinement based on a selection string:
 
 ```python
-from db_ogre_match.refine import refine_material
+from db_ogre_match.refine import refine
 
-refine_material(
+refine(
     selection='cod_id=2300704',   # or e.g. 'total_score>0.7'
     scores_db='scores.db',
 )
@@ -163,7 +163,7 @@ resolved against `scores_db`. Here's a few examples:
 'n_major_facets_scored=3'               # anything that matches 3 major facets of the substrate
 ```
 
-`refine_material` writes
+`refine` writes
 `<reduced_formula>-<cod_id>/interfaces.db` for each material it resolves to,
 one row per substrate/film termination combination of each match `score.py`
 selected for that material, plus one plot per match and one PES/z-shift plot
@@ -178,9 +178,9 @@ sorted by `total_score` descending, best match first (e.g. `ase db
 scores.db -c +cod_id` to list them).
 
 Both `substrate` and `matches_db` default to `None`, which reads
-them from `scores_db`'s own metadata (forwarded there by `score_materials`
-from `match_database`) instead of requiring them to be passed/tracked
-separately; pass either explicitly to override.
+them from `scores_db`'s own metadata (forwarded there by `score` from
+`match`) instead of requiring them to be passed/tracked separately; pass
+either explicitly to override.
 
 ### From the command line
 
@@ -227,10 +227,10 @@ strain/area tolerances, score weights, slab layers/vacuum,
 ### Resuming a long matching run
 
 Lattice matching on large databases can take a few hours, so 
-`match_database`/`match.py` checkpoint after every mother-db row processed.
+`match`/`match.py` checkpoint after every mother-db row processed.
 Pass `restart=True` (`-r`/`--restart` on the CLI) to resume from the
 checkpoint file next to the output database instead of starting over.
-`score_materials` has no equivalent -- scoring is cheap enough to just
+`score` has no equivalent -- scoring is cheap enough to just
 rerun from scratch (a few ms per material; see the module docstring in
 `score.py` for the model).
 
@@ -266,8 +266,8 @@ three namespaces:
   fixed +/-`pes_colormap_bound` eV/Å² range each combo's `PES.png` colorbar
   is capped to (see `refine._run_surface_matching`).
 
-`match_database`/`match.py`, `score_materials`/`score.py`, and
-`refine_material`/`refine.py` all read their keyword/CLI defaults straight
+`match`/`match.py`, `score`/`score.py`, and
+`refine`/`refine.py` all read their keyword/CLI defaults straight
 from here. Edit the values in `config.py` to change the defaults everywhere
 at once (e.g. to tune scoring for a different substrate), or override any
 of them per-call as a keyword argument, or per-run via the CLI flags.
@@ -284,7 +284,7 @@ db: `test_run_matching_data.py` re-runs the `MillerSearch` scan against
 `tests/data/test-matches.db`, `test_ogre_custom.py` checks that
 `interface_from_row`'s closed-form reconstruction matches
 `InterfaceGenerator`'s own search, and `test_workflow_data.py` runs the
-full `match_database` -> `score_materials` workflow and diffs the result
+full `match` -> `score` workflow and diffs the result
 against `tests/data/test-scores.db`, material by material. `score.py`'s
 scoring model itself is also checked directly against known total_score
 values in `tests/test_score.py`, without touching disk.
@@ -293,9 +293,9 @@ values in `tests/test_score.py`, without touching disk.
 
 | file | purpose |
 |------|---------|
-| `match.py` | matching stage: `match_database`, the CLI, checkpoint/restart |
-| `score.py` | scoring stage: `score_materials`, the CLI |
-| `refine.py` | refinement stage: `refine_material`, the CLI |
+| `match.py` | matching stage: `match`, the CLI, checkpoint/restart |
+| `score.py` | scoring stage: `score`, the CLI |
+| `refine.py` | refinement stage: `refine`, the CLI |
 | `cli.py` | the `dbm` console app -- `match`/`score`/`refine` subcommands |
 | `ogre_custom.py` | `OgreInterface.MillerSearch` subclass used by `match.py`, plus the closed-form `Interface` reconstruction used by `refine.py` |
 | `config.py` | shared tunable defaults for all three stages |
