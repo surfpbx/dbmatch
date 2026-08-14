@@ -36,12 +36,12 @@ def test_match_then_score_reproduces_golden_scores(tmp_path, monkeypatch):
         restart=False,
     )
     score_materials(
-        matches_db='db/matches.db',
+        matches_db='matches.db',
         output_csv='scores.csv',
         output_db='scores.db',
     )
 
-    fresh_db = connect('db/scores.db')
+    fresh_db = connect('scores.db')
     golden_db = connect(str(DATA_DIR / 'test-scores.db'))
 
     golden_rows = {row.cod_id: row for row in golden_db.select()}

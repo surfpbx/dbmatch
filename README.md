@@ -128,29 +128,27 @@ match_database(
     max_film_index=1,
     max_strain=0.05,
     max_area=500,
-    output_db='matches.db',      # written to db/matches.db
-    output_csv='matches.csv',    # written to csv/matches.csv
+    output_db='matches.db',      # written to the current directory
+    output_csv='matches.csv',    # written to the current directory
     restart=False,
 )
 
 score_materials(
-    matches_db='db/matches.db',
-    output_csv='scores.csv',     # written to csv/scores.csv
-    output_db='scores.db',       # written to db/scores.db
+    matches_db='matches.db',
+    output_csv='scores.csv',     # written to the current directory
+    output_db='scores.db',       # written to the current directory
 )
 ```
 
-Both functions create `db/` and `csv/` under the current directory if
-they don't already exist, and write output there. After inspecting
-the output scores database, we can pick out materials for refinement
-based on a selection string:
+After inspecting the output scores database, we can pick out materials for
+refinement based on a selection string:
 
 ```python
 from db_ogre_match.refine import refine_material
 
 refine_material(
     selection='cod_id=2300704',   # or e.g. 'total_score>0.7'
-    scores_db='db/scores.db',
+    scores_db='scores.db',
 )
 ```
 
@@ -175,7 +173,7 @@ folder layout. It returns the list of root folders written, one per refined
 
 See [ASE's own database documentation](https://docs.ase-lib.org/ase/db/db.html#querying)
 for the full query syntax `selection` accepts, and more generally for how to
-query/manipulate `db` files yourself (e.g. `ase db db/scores.db -s
+query/manipulate `db` files yourself (e.g. `ase db scores.db -s
 total_score-` to list materials sorted best-first).
 
 Both `substrate` and `matches_db` default to `None`, which reads
@@ -192,7 +190,7 @@ console app, with one subcommand per stage:
 # match the substrate on the whole mother database, with custom options
 dbm match substrate.cif mother.db --max-area 500 -o matches.db --output-csv matches.csv
 # score all materials based on match quality
-dbm score db/matches.db -o scores.db --output-csv scores.csv
+dbm score matches.db -o scores.db --output-csv scores.csv
 # energetical refinement of the matches of COD entry 2300704
 dbm refine cod_id=2300704
 ```
@@ -201,7 +199,7 @@ Each stage also still runs standalone, with identical flags:
 
 ```bash
 python match.py substrate.cif mother.db --max-area 500 -o matches.db --output-csv matches.csv
-python score.py db/matches.db -o scores.db --output-csv scores.csv
+python score.py matches.db -o scores.db --output-csv scores.csv
 python refine.py 'cod_id=2300704'   # we recommend using quotes, especially for multiple-condition selections
 ```
 

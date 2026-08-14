@@ -28,18 +28,18 @@ match_database(
 
 # Assign scores to the materials based on the found matches
 score_materials(
-    matches_db='db/example_matches.db',
+    matches_db='example_matches.db',
     output_csv='example_scores.csv',
     output_db='example_scores.db',
 )
 
 # now inspect the results sorted by total_score in descending order
-# by running "ase db db/example_scores.db -s total_score- -c +cod_id"
+# by running "ase db example_scores.db -s total_score- -c +cod_id"
 
 # entry 2300704 (MnTe) has a perfect score of 1.0. Let's refine it!
 refine_material(
     selection='cod_id=2300704',
-    scores_db='db/example_scores.db',
+    scores_db='example_scores.db',
 )
 
 print('\nRefinement complete! To visualize the generated interfaces, run `ase gui TeMn-2300704/interfaces.db')

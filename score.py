@@ -177,13 +177,13 @@ def score_materials(
 ):
     """
     matches_db:   path to a matches .db.
-    output_csv:   CSV filename, written under 'csv/'.
-    output_db:    db filename, written under 'db/'; one row per
-                  scored material, reusing that material's own atoms.
+    output_csv:   CSV filename, written to the current directory.
+    output_db:    db filename, written to the current directory; one row
+                  per scored material, reusing that material's own atoms.
 
-    Each material is scored and written (to csv/output_csv and
-    db/output_db) as soon as it's scored -- rows land in matches_db's own
-    cod_id order, not sorted by total_score. Writes only; returns nothing.
+    Each material is scored and written (to output_csv and output_db) as
+    soon as it's scored -- rows land in matches_db's own cod_id order, not
+    sorted by total_score. Writes only; returns nothing.
 
     matches_db's absolute path is recorded in output_db's metadata (as
     'matches_db'), so that a material's selected_match_ids can later be
@@ -209,10 +209,8 @@ def score_materials(
         sub_major_minor_ratio,
         flm_major_minor_ratio
     )
-    os.makedirs('csv', exist_ok=True)
-    os.makedirs('db', exist_ok=True)
-    csv_writer = CsvWriter(os.path.join('csv', output_csv), append=False)
-    newdb = connect(os.path.join('db', output_db), append=False)
+    csv_writer = CsvWriter(output_csv, append=False)
+    newdb = connect(output_db, append=False)
     metadata = {'matches_db': os.path.abspath(matches_db)}
     if 'substrate' in src_db.metadata:
         metadata['substrate'] = src_db.metadata['substrate']
@@ -247,7 +245,7 @@ def score_materials(
 
     print(
         f'Scoring finished. Scored {len(grouped)} materials, '
-        f"written to db/{output_db} and csv/{output_csv}."
+        f'written to {output_db} and {output_csv}.'
     )
 
 
@@ -260,11 +258,11 @@ def add_arguments(parser):
     )
     parser.add_argument(
         '-o', '--output-db', default=config.score.output_db,
-        help="name of the output database file, written under 'db/' (default: %(default)s)"
+        help='name of the output database file (default: %(default)s)'
     )
     parser.add_argument(
         '--output-csv', default=config.score.output_csv,
-        help="name of the output CSV file, written under 'csv/' (default: %(default)s)"
+        help='name of the output CSV file (default: %(default)s)'
     )
     parser.add_argument(
         '--w-geom', type=float, default=config.score.w_geom,

@@ -87,9 +87,11 @@ def store_matches(newdb, csv_writer, atoms, kwp, results):
 
 def checkpoint_path_for(output_db):
     """
-    Return the checkpoint file path that goes alongside output_db.
+    Return the checkpoint file path that goes alongside output_db, as a
+    dotfile so it doesn't clutter directory listings.
     """
-    return f'{output_db}.checkpoint'
+    directory, name = os.path.split(output_db)
+    return os.path.join(directory, f'.{name}.checkpoint')
 
 
 def read_checkpoint(checkpoint_path):
@@ -155,8 +157,9 @@ def match_database(
     restart,
 ):
     """
-    Match mother_db against substrate and write results under db/ and csv/,
-    optionally resuming from the output db's checkpoint file.
+    Match mother_db against substrate and write results to output_db/
+    output_csv in the current directory, optionally resuming from the
+    output db's checkpoint file.
 
     mother_db's and substrate's absolute paths are recorded in output_db's
     metadata (as 'mother_db'/'substrate'), so that a matches row can be
@@ -165,11 +168,8 @@ def match_database(
     """
     print(f'\nMatching {mother_db} against {substrate}...')
 
-    os.makedirs('db', exist_ok=True)
-    os.makedirs('csv', exist_ok=True)
-
-    db_path = os.path.join('db', output_db)
-    csv_path = os.path.join('csv', output_csv)
+    db_path = output_db
+    csv_path = output_csv
 
     checkpoint_path = checkpoint_path_for(db_path)
 
@@ -244,11 +244,11 @@ def add_arguments(parser):
     )
     parser.add_argument(
         '-o', '--output-db', default=config.match.output_db,
-        help="name of the output database file, written under 'db/' (default: %(default)s)"
+        help='name of the output database file (default: %(default)s)'
     )
     parser.add_argument(
         '--output-csv', default=config.match.output_csv,
-        help="name of the output CSV file, written under 'csv/' (default: %(default)s)"
+        help='name of the output CSV file (default: %(default)s)'
     )
     parser.add_argument(
         '-r', '--restart', action='store_true',

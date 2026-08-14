@@ -9,8 +9,8 @@ match = SimpleNamespace(
     max_strain=0.05,          # max strain allowed between substrate/film lattices
     max_area=500,             # max interface supercell area
     max_area_mismatch=0.08,   # max relative area mismatch between substrate/film supercells
-    output_db='matches.db',   # output database filename, written under 'db/'
-    output_csv='matches.csv', # output CSV filename, written under 'csv/'
+    output_db='matches.db',   # output database filename
+    output_csv='matches.csv', # output CSV filename
 )
 
 # facets treated as "major" for each bravais class, keyed by bravais symbol
@@ -26,8 +26,8 @@ _major_facets_by_bravais = {
 # Scoring stage options
 # ---------------------
 score = SimpleNamespace(
-    output_db='scores.db',         # output database filename, written under 'db/'
-    output_csv='scores.csv',       # output CSV filename, written under 'csv/'
+    output_db='scores.db',         # output database filename
+    output_csv='scores.csv',       # output CSV filename
     w_geom=0.75,                   # weight of geom_score in total_score
     w_sg=0.15,                     # weight of sg_score in total_score
     w_comp=0.10,                   # weight of comp_score in total_score

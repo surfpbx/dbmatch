@@ -11,9 +11,17 @@ own
                                             #   its energies, identifying
                                             #   keys (cod_id, match_id,
                                             #   sub_hkl/flm_hkl, termination
-                                            #   indices), and subfolder (the
-                                            #   combo's own plot directory,
-                                            #   relative to this root)
+                                            #   indices, sub_species/
+                                            #   film_species -- the element
+                                            #   actually facing the
+                                            #   interface on each side for
+                                            #   this termination), and
+                                            #   subfolder (the combo's own
+                                            #   plot directory, relative to
+                                            #   this root)
+        results.txt                        # the same per-combo fields as
+                                            # interfaces.db, as a plain-text
+                                            # table for a quick human read
         <match_id>_sub<sub_hkl>_flm<flm_hkl>/
             interface_view.png             # one plot per match -- the
                                             # lattice-registry geometry is
@@ -56,27 +64,34 @@ def _sanitize_hkl(hkl):
     return hkl.replace(',', '')
 
 
-def _contact_distance(sub_structure, film_structure, factor=config.refine.contact_distance_factor):
-    """The natural ionic contact distance between the two atoms that will
-    actually face each other across the interface: the substrate's topmost
-    atom and the film's bottommost atom (each structure in its own
-    z-coordinate frame -- substrate slabs and film slabs are both generated
+def _terminating_atoms(sub_structure, film_structure):
+    """The two atoms that will actually face each other across the
+    interface for this termination combo: the substrate's topmost atom and
+    the film's bottommost atom (each structure in its own z-coordinate
+    frame -- substrate slabs and film slabs are both generated
     independently before being merged into an interface, but merging only
     translates each rigid slab along z, so the atom picked out here is the
-    same one that ends up facing the interface after merging). D is factor
-    times the sum of their pymatgen Element.average_ionic_radius -- used
-    both as the interface's starting interfacial_distance and as the basis
-    for the z-shift scan range (see _z_shift_range). factor defaults to
-    config.refine.contact_distance_factor, > 1 to push the raw ionic-radii
-    sum (which tends to sit a bit closer than a real relaxed contact
-    distance) outward."""
+    same one that ends up facing the interface after merging). Returned as
+    pymatgen sites, so callers can pull out whatever they need (ionic
+    radius for _contact_distance, element symbol for display, ...) without
+    re-deriving which atom is "at the surface" more than once."""
     sub_z = sub_structure.cart_coords[:, -1]
     film_z = film_structure.cart_coords[:, -1]
 
-    sub_radius = sub_structure[sub_z.argmax()].specie.average_ionic_radius
-    film_radius = film_structure[film_z.argmin()].specie.average_ionic_radius
+    return sub_structure[sub_z.argmax()], film_structure[film_z.argmin()]
 
-    return factor * (float(sub_radius) + float(film_radius))
+
+def _contact_distance(sub_structure, film_structure, factor=config.refine.contact_distance_factor):
+    """The natural ionic contact distance between the two atoms that will
+    actually face each other across the interface (see _terminating_atoms).
+    D is factor times the sum of their pymatgen Element.average_ionic_radius
+    -- used both as the interface's starting interfacial_distance and as
+    the basis for the z-shift scan range (see _z_shift_range). factor
+    defaults to config.refine.contact_distance_factor, > 1 to push the raw
+    ionic-radii sum (which tends to sit a bit closer than a real relaxed
+    contact distance) outward."""
+    sub_atom, film_atom = _terminating_atoms(sub_structure, film_structure)
+    return factor * (float(sub_atom.specie.average_ionic_radius) + float(film_atom.specie.average_ionic_radius))
 
 
 def _z_shift_range(D, n_points=config.refine.z_shift_n_points):
@@ -108,6 +123,44 @@ def _run_surface_matching(matcher, output, bound=config.refine.pes_colormap_boun
 
     with patch.object(base_surface_matcher, 'Normalize', _fixed_normalize):
         return matcher.run_surface_matching(output=output)
+
+
+_RESULTS_TABLE_COLUMNS = [
+    # (header, row key, alignment)
+    ('Match ID', 'match_id', '>'),
+    ('Substrate (hkl)', 'sub_hkl', '>'),
+    ('Film (hkl)', 'flm_hkl', '>'),
+    ('Termination', 'termination', '>'),
+    ('Eadh (eV/Å²)', 'adhesion_energy', '>'),
+    ('Eint (eV/Å²)', 'interface_energy', '>'),
+    ('d_int (Å)', 'interfacial_distance', '>'),
+    ('Subfolder', 'subfolder', '<'),
+]
+
+
+def _results_table(rows):
+    """rows: a list of dicts, one per termination combo, with a string value
+    for every key in _RESULTS_TABLE_COLUMNS -- rendered as a column-aligned
+    plain-text table (written to <root>/results.txt by
+    _refine_one_material)."""
+    widths = [
+        max([len(header)] + [len(row[key]) for row in rows])
+        for header, key, _ in _RESULTS_TABLE_COLUMNS
+    ]
+
+    def fmt_row(values):
+        return '  '.join(
+            f'{value:{align}{width}}'
+            for value, (_, _, align), width in zip(values, _RESULTS_TABLE_COLUMNS, widths)
+        )
+
+    lines = [
+        fmt_row([header for header, _, _ in _RESULTS_TABLE_COLUMNS]),
+        '  '.join('-' * width for width in widths),
+    ]
+    lines += [fmt_row([row[key] for _, key, _ in _RESULTS_TABLE_COLUMNS]) for row in rows]
+
+    return '\n'.join(lines) + '\n'
 
 
 def selected_matches(scores_db, cod_id, matches_db=None):
@@ -192,6 +245,7 @@ def _refine_one_material(
     # append=False: re-running refine on the same material should replace
     # interfaces.db, not accumulate duplicate rows alongside the old ones
     results_db = connect(os.path.join(root, 'interfaces.db'), append=False)
+    results_rows = []
 
     for i, match in enumerate(matches):
         film_atoms = match.toatoms()
@@ -232,9 +286,12 @@ def _refine_one_material(
                 # criterion as the z-shift scan below -- computed per
                 # termination combo, since different terminations expose
                 # different atoms at the surface
-                D = _contact_distance(
-                    sub.get_surface(orthogonal=True), film.get_surface(orthogonal=True)
-                )
+                sub_surface = sub.get_surface(orthogonal=True)
+                film_surface = film.get_surface(orthogonal=True)
+                D = _contact_distance(sub_surface, film_surface)
+                sub_atom, film_atom = _terminating_atoms(sub_surface, film_surface)
+                sub_species = sub_atom.specie.symbol
+                film_species = film_atom.specie.symbol
 
                 interface_generator = InterfaceGenerator(
                     substrate=sub,
@@ -272,9 +329,9 @@ def _refine_one_material(
                 subfolder = os.path.join(os.path.basename(match_dir), f'sub{si}_flm{fi}')
 
                 print(
-                    f'  sub{si}/flm{fi}:  '
-                    f'Eadh={adhesion_energy:7.4f} eV/Å²  '
-                    f'Eint={interface_energy:7.4f} eV/Å²  '
+                    f'  sub{si}({sub_species})/flm{fi}({film_species}):  '
+                    f'Eadh= {adhesion_energy:7.4f} eV/Å²  '
+                    f'Eint= {interface_energy:7.4f} eV/Å²  '
                     f'{os.path.join(root, subfolder)}'
                 )
 
@@ -290,11 +347,33 @@ def _refine_one_material(
                     flm_hkl=match.flm_hkl,
                     sub_termination=si,
                     film_termination=fi,
+                    sub_species=sub_species,
+                    film_species=film_species,
                     adhesion_energy=float(adhesion_energy),
                     interface_energy=float(interface_energy),
                     interfacial_distance=float(interface.interfacial_distance),
                     subfolder=subfolder,
                 )
+
+                results_rows.append({
+                    'match_id': str(match.id),
+                    'sub_hkl': f'({_sanitize_hkl(match.sub_hkl)})',
+                    'flm_hkl': f'({_sanitize_hkl(match.flm_hkl)})',
+                    'termination': f'{sub_species}/{film_species}',
+                    'adhesion_energy': f'{adhesion_energy:.4f}',
+                    'interface_energy': f'{interface_energy:.4f}',
+                    'interfacial_distance': f'{interface.interfacial_distance:.4f}',
+                    'subfolder': subfolder,
+                })
+
+    with open(os.path.join(root, 'results.txt'), 'w') as f:
+        f.write(_results_table(results_rows))
+
+    print(
+        f'\n{reduced_formula}-{cod_id}: {len(results_rows)} interface(s) saved to '
+        f'{os.path.join(root, "interfaces.db")}, summary written to '
+        f'{os.path.join(root, "results.txt")}'
+    )
 
     return root
 
@@ -327,7 +406,7 @@ def add_arguments(parser):
         )
     )
     parser.add_argument(
-        '-d', '--scores-db', default=os.path.join('db', config.score.output_db),
+        '-d', '--scores-db', default=config.score.output_db,
         help='path to the scores database (default: %(default)s)'
     )
     parser.add_argument(

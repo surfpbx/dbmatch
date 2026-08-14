@@ -72,7 +72,7 @@ def test_dbm_match_cli_takes_substrate_then_mother_db(tmp_path, monkeypatch):
         '--output-csv', 'matches.csv',
     ])
 
-    fresh_db = connect('db/matches.db')
+    fresh_db = connect('matches.db')
     golden_db = connect(str(DATA_DIR / 'test-matches.db'))
 
     for cod_id in {row.cod_id for row in golden_db.select()}:
