@@ -209,6 +209,17 @@ python refine.py 'cod_id=2300704'   # we recommend using quotes, especially for 
 by default (see "As a library" above); pass `--substrate`/`--matches-db` to
 override either.
 
+To inspect a specific result afterward instead of running refine again,
+`dbm refine --view <id>` visualizes one `interfaces.db` row's optimized
+structure (`ase.visualize.view`) and opens its `PES.png`/`z_shift.png`
+(`xdg-open`) -- `<id>` is that row's own `ase db` id. Run it from inside the
+material's own `<reduced_formula>-<cod_id>/` folder, or pass
+`--interfaces-db` to point at a different one:
+
+```bash
+cd TeMn-2300704 && dbm refine --view 3
+```
+
 Run `dbm --help` / `dbm <stage> --help` (or equivalently `python
 <stage>.py --help`) for the full list of options (miller index cutoffs,
 strain/area tolerances, score weights, slab layers/vacuum,
@@ -252,7 +263,9 @@ three namespaces:
   in the interfacial-distance scan for `refine.py` (the scan's bounds, and
   the starting interfacial distance itself, are derived per termination
   combo from the ionic radii of the two atoms facing each other across the
-  interface -- see `refine._contact_distance`/`_z_shift_range`).
+  interface -- see `refine._contact_distance`/`_z_shift_range`), plus the
+  fixed +/-`pes_colormap_bound` eV/Å² range each combo's `PES.png` colorbar
+  is capped to (see `refine._run_surface_matching`).
 
 `match_database`/`match.py`, `score_materials`/`score.py`, and
 `refine_material`/`refine.py` all read their keyword/CLI defaults straight

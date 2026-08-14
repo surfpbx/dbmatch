@@ -54,4 +54,11 @@ refine = SimpleNamespace(
     z_shift_n_points=31,       # number of points sampled in the interfacial-distance scan (both the
                                # starting interfacial_distance and the scan bounds are derived per-combo
                                # from ionic radii -- see refine._contact_distance/_z_shift_range)
+    contact_distance_factor=1.25,  # scales _contact_distance's raw ionic-radii sum -- pure Shannon/
+                                    # ionic radii tend to sit a bit closer than a real relaxed contact
+                                    # distance, so this nudges the starting point (and z-shift scan
+                                    # range, since both derive from the same D) outward
+    pes_colormap_bound=1.0,    # eV/A^2: fixed symmetric bound for the PES plot's colorbar, replacing
+                               # OgreInterface's own data-min/max auto-scaling -- see
+                               # refine._run_surface_matching
 )

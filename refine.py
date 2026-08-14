@@ -24,23 +24,28 @@ own
             sub<i>_flm<j>/
                 PES.png                     # in-plane 2D scan
                 z_shift.png                 # interfacial-distance scan
+                interface.cif               # optimized structure, same as
+                                             # this combo's interfaces.db row
 
-This deliberately never writes a POSCAR/plot per combination outside of
-PES.png/z_shift.png -- since every combination is already reconstructible on
-demand from (cod_id, match_id, sub_termination, film_termination) via
-ogre_custom.interface_from_row, the optimized structure landing in
-interfaces.db is enough to regenerate anything else later.
+interface.cif is written purely for convenience (a quick look with any CIF
+viewer, no ase db query needed) -- the same structure is already stored in
+interfaces.db, so it's not needed to regenerate anything.
 """
 
 import argparse
 import os
+import subprocess
+from unittest.mock import patch
 
+import matplotlib.colors
 import numpy as np
 from ase.db import connect
 from ase.io import read
+from ase.visualize import view as ase_view
 from pymatgen.io.ase import AseAtomsAdaptor
 from OgreInterface.generate import InterfaceGenerator, SurfaceGenerator
 from OgreInterface.surface_matching import IonicSurfaceMatcher
+from OgreInterface.surface_matching import base_surface_matcher
 
 from db_ogre_match import config
 from db_ogre_match.ogre_custom import hkl_from_str, interface_from_row
@@ -51,24 +56,27 @@ def _sanitize_hkl(hkl):
     return hkl.replace(',', '')
 
 
-def _contact_distance(sub_structure, film_structure):
+def _contact_distance(sub_structure, film_structure, factor=config.refine.contact_distance_factor):
     """The natural ionic contact distance between the two atoms that will
     actually face each other across the interface: the substrate's topmost
     atom and the film's bottommost atom (each structure in its own
     z-coordinate frame -- substrate slabs and film slabs are both generated
     independently before being merged into an interface, but merging only
     translates each rigid slab along z, so the atom picked out here is the
-    same one that ends up facing the interface after merging). D is the sum
-    of their pymatgen Element.average_ionic_radius -- used both as the
-    interface's starting interfacial_distance and as the basis for the
-    z-shift scan range (see _z_shift_range)."""
+    same one that ends up facing the interface after merging). D is factor
+    times the sum of their pymatgen Element.average_ionic_radius -- used
+    both as the interface's starting interfacial_distance and as the basis
+    for the z-shift scan range (see _z_shift_range). factor defaults to
+    config.refine.contact_distance_factor, > 1 to push the raw ionic-radii
+    sum (which tends to sit a bit closer than a real relaxed contact
+    distance) outward."""
     sub_z = sub_structure.cart_coords[:, -1]
     film_z = film_structure.cart_coords[:, -1]
 
     sub_radius = sub_structure[sub_z.argmax()].specie.average_ionic_radius
     film_radius = film_structure[film_z.argmin()].specie.average_ionic_radius
 
-    return float(sub_radius) + float(film_radius)
+    return factor * (float(sub_radius) + float(film_radius))
 
 
 def _z_shift_range(D, n_points=config.refine.z_shift_n_points):
@@ -81,6 +89,25 @@ def _z_shift_range(D, n_points=config.refine.z_shift_n_points):
     interface and was cutting several combos' true PES optimum off at its
     narrow upper edge."""
     return np.linspace(0.5 * D, 2 * D, n_points)
+
+
+def _run_surface_matching(matcher, output, bound=config.refine.pes_colormap_bound):
+    """matcher.run_surface_matching(output=output), but with the PES plot's
+    colorbar pinned to a fixed +/-bound eV/A^2 range instead of
+    OgreInterface's own data-min/max auto-scaling -- a few outlier grid
+    points (e.g. atoms overlapping at a bad registry) would otherwise wash
+    out the color contrast of the physically relevant part of the scan.
+    run_surface_matching's own public signature has no vmin/vmax parameter;
+    matplotlib.colors.Normalize is the only thing base_surface_matcher calls
+    to build that colorbar, and only inside _plot_heatmap (confirmed: it's
+    not reused by run_z_shift's own line plot), so patching that one name
+    for the duration of this call reproduces a vmin/vmax kwarg without
+    touching OgreInterface's source."""
+    def _fixed_normalize(*args, **kwargs):
+        return matplotlib.colors.Normalize(vmin=-bound, vmax=bound, clip=True)
+
+    with patch.object(base_surface_matcher, 'Normalize', _fixed_normalize):
+        return matcher.run_surface_matching(output=output)
 
 
 def selected_matches(scores_db, cod_id, matches_db=None):
@@ -193,8 +220,8 @@ def _refine_one_material(
         os.makedirs(match_dir, exist_ok=True)
 
         print(
-            f'\n({i}/{nmatches}) match id={match.id}: {len(subs)} substrate termination(s), '
-            f'{len(films)} film termination(s)'
+            f'\n({i+1}/{nmatches}) ({_sanitize_hkl(match.sub_hkl)})║({_sanitize_hkl(match.flm_hkl)}): '
+            f'{len(subs)} substrate termination(s), {len(films)} film termination(s)'
         )
 
         view_saved = False
@@ -232,7 +259,7 @@ def _refine_one_material(
 
                 matcher = IonicSurfaceMatcher(interface=interface, verbose=False)
 
-                matcher.run_surface_matching(output=os.path.join(combo_dir, 'PES.png'))
+                _run_surface_matching(matcher, output=os.path.join(combo_dir, 'PES.png'))
                 matcher.get_optimized_structure()
 
                 matcher.run_z_shift(
@@ -242,12 +269,18 @@ def _refine_one_material(
                 matcher.get_optimized_structure()
 
                 adhesion_energy, interface_energy = matcher.get_current_energy()
+                subfolder = os.path.join(os.path.basename(match_dir), f'sub{si}_flm{fi}')
 
                 print(
-                    f'  sub{si}/flm{fi}: Eadh={adhesion_energy:.4f} eV/A^2'
+                    f'  sub{si}/flm{fi}:  '
+                    f'Eadh={adhesion_energy:7.4f} eV/Å²  '
+                    f'Eint={interface_energy:7.4f} eV/Å²  '
+                    f'{os.path.join(root, subfolder)}'
                 )
 
                 atoms = AseAtomsAdaptor.get_atoms(matcher.iface)
+                atoms.write(os.path.join(combo_dir, 'interface.cif'))
+
                 results_db.write(
                     atoms,
                     cod_id=cod_id,
@@ -260,21 +293,37 @@ def _refine_one_material(
                     adhesion_energy=float(adhesion_energy),
                     interface_energy=float(interface_energy),
                     interfacial_distance=float(interface.interfacial_distance),
-                    subfolder=os.path.join(os.path.basename(match_dir), f'sub{si}_flm{fi}'),
+                    subfolder=subfolder,
                 )
 
     return root
+
+
+def view_interface(interfaces_db, row_id):
+    """Visualize one interfaces.db row's optimized structure (ase.visualize.view)
+    and open its PES.png/z_shift.png plots (xdg-open) -- both found via that
+    row's own subfolder, relative to interfaces_db's own directory (see
+    _refine_one_material's subfolder=... kwarg)."""
+    db = connect(interfaces_db)
+    row = db.get(id=row_id)
+
+    ase_view(row.toatoms())
+
+    combo_dir = os.path.join(os.path.dirname(os.path.abspath(interfaces_db)), row.subfolder)
+    for plot in ('PES.png', 'z_shift.png'):
+        subprocess.Popen(['xdg-open', os.path.join(combo_dir, plot)])
 
 
 def add_arguments(parser):
     """Add refine_material's CLI arguments to parser (shared by this file's
     own __main__ block and by cli.py's `dbm refine` subcommand)."""
     parser.add_argument(
-        'selection',
+        'selection', nargs='?', default=None,
         help=(
             "an ase db selection picking which cod_ids to refine, e.g. "
             "'cod_id=2300704' or 'total_score>0.7' -- any query "
-            "db.select() accepts, resolved against the scores database"
+            "db.select() accepts, resolved against the scores database. "
+            "Not needed (and ignored) if --view is given."
         )
     )
     parser.add_argument(
@@ -297,12 +346,37 @@ def add_arguments(parser):
     )
     parser.add_argument('--layers', type=int, default=config.refine.layers)
     parser.add_argument('--vacuum', type=float, default=config.refine.vacuum)
+    parser.add_argument(
+        '--view', type=int, default=None, metavar='ID',
+        help=(
+            "visualize one interfaces.db row instead of running refine: ID "
+            "is the row's own ase db id. Opens its optimized structure via "
+            "ase.visualize.view and its PES.png/z_shift.png via xdg-open."
+        )
+    )
+    parser.add_argument(
+        '--interfaces-db', default='interfaces.db',
+        help=(
+            "path to the interfaces database to read from with --view "
+            "(default: %(default)s, i.e. run from inside the material's "
+            "own <reduced_formula>-<cod_id>/ folder)"
+        )
+    )
     return parser
 
 
 def main(args):
     """Run refine_material from a parsed add_arguments() namespace -- shared
-    by this file's own __main__ block and by cli.py's `dbm refine`."""
+    by this file's own __main__ block and by cli.py's `dbm refine`. If
+    --view is given, visualizes that interfaces.db row instead and returns
+    without running refine_material at all."""
+    if args.view is not None:
+        view_interface(args.interfaces_db, args.view)
+        return
+
+    if args.selection is None:
+        raise SystemExit('refine: error: selection is required unless --view is given')
+
     refine_material(
         args.selection,
         args.scores_db,
