@@ -33,8 +33,8 @@ score_materials(
     output_db='example_scores.db',
 )
 
-# now inspect the results sorted by total_score in descending order
-# by running "ase db example_scores.db -s total_score- -c +cod_id"
+# now inspect the results (already sorted by total_score descending) by
+# running "ase db example_scores.db -c +cod_id"
 
 # entry 2300704 (MnTe) has a perfect score of 1.0. Let's refine it!
 refine_material(

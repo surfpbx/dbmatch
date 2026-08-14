@@ -173,8 +173,9 @@ folder layout. It returns the list of root folders written, one per refined
 
 See [ASE's own database documentation](https://docs.ase-lib.org/ase/db/db.html#querying)
 for the full query syntax `selection` accepts, and more generally for how to
-query/manipulate `db` files yourself (e.g. `ase db scores.db -s
-total_score-` to list materials sorted best-first).
+query/manipulate `db` files yourself -- `scores_db` is already written
+sorted by `total_score` descending, best match first (e.g. `ase db
+scores.db -c +cod_id` to list them).
 
 Both `substrate` and `matches_db` default to `None`, which reads
 them from `scores_db`'s own metadata (forwarded there by `score_materials`

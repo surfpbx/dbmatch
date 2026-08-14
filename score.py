@@ -181,9 +181,9 @@ def score_materials(
     output_db:    db filename, written to the current directory; one row
                   per scored material, reusing that material's own atoms.
 
-    Each material is scored and written (to output_csv and output_db) as
-    soon as it's scored -- rows land in matches_db's own cod_id order, not
-    sorted by total_score. Writes only; returns nothing.
+    Every material is scored first, then all of them are written (to
+    output_csv and output_db) sorted by total_score descending, best match
+    first. Writes only; returns nothing.
 
     matches_db's absolute path is recorded in output_db's metadata (as
     'matches_db'), so that a material's selected_match_ids can later be
@@ -216,6 +216,7 @@ def score_materials(
         metadata['substrate'] = src_db.metadata['substrate']
     newdb.metadata = metadata
 
+    materials = []
     for rows in tqdm(grouped.values()):
         # static per-material properties, taken from the first match row --
         # excluding that row's own per-match fields (MATCH_RESULT_KEYS),
@@ -235,6 +236,11 @@ def score_materials(
         mat['total_score'] = (w_geom * mat['geom_score']
                               + w_sg * mat['sg_score']
                               + w_comp * mat['comp_score'])
+        materials.append(mat)
+
+    materials.sort(key=lambda mat: mat['total_score'], reverse=True)
+
+    for mat in materials:
         row = _csv_row(mat)
         csv_writer.writerow(row)
 
