@@ -140,6 +140,39 @@ score(
 )
 ```
 
+`score`'s own geometric/space-group/chemistry scoring is just the built-in
+default -- pass `scoring_fn` to score by any other criterion instead:
+
+```python
+def my_scoring_fn(rows):
+    # rows: one cod_id's matches group (group_db(matches_db)'s own value
+    # type) -- one dict per facet-pairing match.py found for this material,
+    # carrying both match.py's own per-match fields (area, strain, sub_hkl,
+    # flm_hkl, sub_transform, flm_transform, n_sub_reps, n_flm_reps) and the
+    # material's own mother-db fields (cod_id, reduced_formula, sg_number,
+    # bravais, ...), the same on every row. Loop over rows and combine
+    # whatever match.py fields matter for this scoring criterion, e.g.:
+    best_area = min(row['area'] for row in rows)
+    return {'total_score': ..., 'my_extra_field': [...]}   # total_score is mandatory
+
+score(
+    matches_db='matches.db',
+    output_csv='scores.csv',
+    output_db='scores.db',
+    scoring_fn=my_scoring_fn,
+)
+```
+
+`scoring_fn` must return a dict with at least `total_score`; any other
+keys are carried into `output_db`/`output_csv` alongside the material's
+own mother-db fields (list-valued extras are `;`-joined into a string, the
+same way `geom_score_for_material`'s own `selected_match_ids`/
+`major_facets_scored` already are). `w_geom`/`w_sg`/`w_comp` and the rest
+of `score`'s tunable keyword arguments are only used to build the default
+`scoring_fn` when one isn't given -- they're ignored otherwise. There's no
+CLI flag for `scoring_fn` (an arbitrary Python callable has no CLI
+encoding); `dbm score`/`python score.py` always use the built-in default.
+
 After inspecting the output scores database, we can pick out materials for
 refinement based on a selection string:
 
@@ -257,7 +290,9 @@ three namespaces:
   default output filenames for `match.py`.
 - `config.score` -- score weights, facet-tier values, the
   substrate-compatible space groups/elements/major-facets, and default
-  output filenames for `score.py`.
+  output filenames for `score.py`. These only parameterize `score.py`'s
+  own built-in `default_scoring_function` -- a custom `scoring_fn` (see
+  "As a library" above) ignores them entirely.
 - `config.refine` -- slab layers/vacuum, and the number of points sampled
   in the interfacial-distance scan for `refine.py` (the scan's bounds, and
   the starting interfacial distance itself, are derived per termination

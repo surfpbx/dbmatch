@@ -149,20 +149,59 @@ def group_db(db):
 
 
 def _csv_row(mat):
-    """mat, with major_facets_scored and selected_match_ids serialised as
-    ';'-separated strings (e.g. '0,0,1;1,1,0') so the comma-bearing hkl
-    labels don't collide with the CSV delimiter."""
+    """mat, with every list-valued field (e.g. geom_score_for_material's own
+    major_facets_scored/selected_match_ids, or any list a custom scoring_fn
+    returns) serialised as a ';'-separated string -- so comma-bearing values
+    (e.g. hkl labels like '0,0,1') don't collide with the CSV delimiter, and
+    so ase db's key_value_pairs (str/int/float/bool only) can store it too,
+    via the same dict reused for newdb.write(**kvp)."""
     return {
-        **mat,
-        'major_facets_scored': ';'.join(mat['major_facets_scored']),
-        'selected_match_ids': ';'.join(str(i) for i in mat['selected_match_ids']),
+        k: ';'.join(str(x) for x in v) if isinstance(v, list) else v
+        for k, v in mat.items()
     }
+
+
+def default_scoring_function(
+    w_geom=config.score.w_geom, w_sg=config.score.w_sg, w_comp=config.score.w_comp,
+    base_major_major=config.score.base_major_major,
+    sub_major_minor_ratio=config.score.sub_major_minor_ratio,
+    flm_major_minor_ratio=config.score.flm_major_minor_ratio,
+    major_sub_facets=config.score.major_sub_facets,
+    compatible_sg=config.score.sub_compatible_sg,
+    compatible_elements=config.score.sub_compatible_elements,
+):
+    """Build score()'s own built-in scoring function: a closure over the
+    tunables above, matching the scoring_fn contract score() expects --
+    rows (one cod_id's matches group, as group_db groups matches_db) in,
+    a dict with at least total_score out. sg_number/reduced_formula are
+    read off rows[0] since every match row already carries the material's
+    own mother-db fields (match.py's store_matches copies them into every
+    match row it writes), not just its own match-specific ones -- so this
+    closure is self-sufficient given just rows, same as any custom
+    scoring_fn would be."""
+    tier_values = build_tier_values(
+        base_major_major, sub_major_minor_ratio, flm_major_minor_ratio
+    )
+
+    def scoring_fn(rows):
+        result = geom_score_for_material(rows, tier_values, major_sub_facets)
+        result['sg_score'] = sg_score(rows[0]['sg_number'], compatible_sg)
+        result['comp_score'] = comp_score(rows[0]['reduced_formula'], compatible_elements)
+        result['total_score'] = (w_geom * result['geom_score']
+                                 + w_sg * result['sg_score']
+                                 + w_comp * result['comp_score'])
+        return result
+
+    return scoring_fn
 
 
 def score(
     matches_db,
     output_csv,
     output_db,
+    scoring_fn=None,
+    # only used to build the default scoring_fn (default_scoring_function)
+    # when scoring_fn isn't given -- ignored otherwise
     # final weights
     w_geom=config.score.w_geom, w_sg=config.score.w_sg, w_comp=config.score.w_comp,
     # facet-tier params
@@ -180,6 +219,14 @@ def score(
     output_csv:   CSV filename, written to the current directory.
     output_db:    db filename, written to the current directory; one row
                   per scored material, reusing that material's own atoms.
+    scoring_fn:   rows (one cod_id's matches group, as group_db groups
+                  matches_db) -> a dict with at least a total_score key;
+                  any other keys are carried into output_db/output_csv
+                  alongside the material's own mother-db fields. Defaults
+                  to None, which builds default_scoring_function from this
+                  call's own w_geom/w_sg/.../compatible_elements kwargs
+                  (the CLI always uses this default -- an arbitrary Python
+                  callable has no CLI encoding).
 
     Every material is scored first, then all of them are written (to
     output_csv and output_db) sorted by total_score descending, best match
@@ -195,20 +242,21 @@ def score(
     """
     print(f'\nScoring materials from {matches_db}...')
 
-    if not math.isclose(w_geom + w_sg + w_comp, 1.0, abs_tol=1e-9):
-        warnings.warn(
-            f'score weights do not sum to 1: w_geom={w_geom}, w_sg={w_sg}, '
-            f'w_comp={w_comp} (sum={w_geom + w_sg + w_comp})'
+    if scoring_fn is None:
+        if not math.isclose(w_geom + w_sg + w_comp, 1.0, abs_tol=1e-9):
+            warnings.warn(
+                f'score weights do not sum to 1: w_geom={w_geom}, w_sg={w_sg}, '
+                f'w_comp={w_comp} (sum={w_geom + w_sg + w_comp})'
+            )
+        scoring_fn = default_scoring_function(
+            w_geom, w_sg, w_comp,
+            base_major_major, sub_major_minor_ratio, flm_major_minor_ratio,
+            major_sub_facets, compatible_sg, compatible_elements,
         )
 
     src_db = connect(matches_db)
     grouped = group_db(src_db)
 
-    tier_values = build_tier_values(
-        base_major_major,
-        sub_major_minor_ratio,
-        flm_major_minor_ratio
-    )
     csv_writer = CsvWriter(output_csv, append=False)
     newdb = connect(output_db, append=False)
     metadata = {'matches_db': os.path.abspath(matches_db)}
@@ -224,18 +272,12 @@ def score(
         # itself, and belong only in matches_db
         mat = {k: v for k, v in rows[0].items() if k not in MATCH_RESULT_KEYS}
 
-        mat.update(
-            geom_score_for_material(
-                rows, tier_values, major_sub_facets
+        result = scoring_fn(rows)
+        if 'total_score' not in result:
+            raise ValueError(
+                f"scoring_fn must return a dict with a 'total_score' key (got: {sorted(result)})"
             )
-        )
-        mat['sg_score'] = sg_score(mat['sg_number'], compatible_sg)
-        mat['comp_score'] = comp_score(
-            mat['reduced_formula'], compatible_elements
-        )
-        mat['total_score'] = (w_geom * mat['geom_score']
-                              + w_sg * mat['sg_score']
-                              + w_comp * mat['comp_score'])
+        mat.update(result)
         materials.append(mat)
 
     materials.sort(key=lambda mat: mat['total_score'], reverse=True)

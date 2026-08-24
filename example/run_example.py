@@ -43,3 +43,30 @@ refine(
 )
 
 print('\nRefinement complete! To visualize the generated interfaces, run `ase gui TeMn-2300704/interfaces.db')
+
+
+def strain_area_scoring_fn(rows):
+    """A custom scoring_fn, demonstrating score()'s plug-in point: ranks
+    materials by how little strain/area their matches need, instead of the
+    built-in geometric/space-group/chemistry criteria -- total_score is
+    1 / (average strain * average area) over this cod_id's whole matches
+    group, so a smaller (better) product gives a higher total_score
+    (score() always writes output sorted by total_score descending, best
+    match first)."""
+    avg_strain = sum(row['strain'] for row in rows) / len(rows)
+    avg_area = sum(row['area'] for row in rows) / len(rows)
+    return {
+        'total_score': 1 / (avg_strain * avg_area),
+        'avg_strain': avg_strain,
+        'avg_area': avg_area,
+    }
+
+
+# re-score the same matches with the custom criterion above, into its own
+# separate output files -- doesn't touch example_scores.db/csv
+score(
+    matches_db='example_matches.db',
+    output_csv='example_scores_custom.csv',
+    output_db='example_scores_custom.db',
+    scoring_fn=strain_area_scoring_fn,
+)
