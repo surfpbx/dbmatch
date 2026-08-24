@@ -115,6 +115,21 @@ def write_checkpoint(checkpoint_path, row_id):
     os.replace(tmp_path, checkpoint_path)
 
 
+def clear_stale_matches(newdb, cod_id):
+    """
+    Delete any match rows already written for cod_id from newdb.
+
+    Used before re-matching the checkpointed row on restart: that row's
+    matches may or may not have actually made it to disk before the
+    previous run stopped. Restart always redoes that one row from
+    scratch, so its own prior output (partial, complete, or none at all)
+    must be cleared first to avoid duplicates.
+    """
+    stale_ids = [row.id for row in newdb.select(cod_id=cod_id)]
+    if stale_ids:
+        newdb.delete(stale_ids)
+
+
 def run_matching(
     db,
     newdb,
@@ -159,7 +174,10 @@ def match(
     """
     Match mother_db against substrate and write results to output_db/
     output_csv in the current directory, optionally resuming from the
-    output db's checkpoint file.
+    output db's checkpoint file -- restart re-matches the checkpointed
+    row itself too (not just the ones after it), first clearing any of
+    its matches already in output_db, since there's no guarantee its
+    matches made it to disk before the previous run stopped.
 
     mother_db's and substrate's absolute paths are recorded in output_db's
     metadata (as 'mother_db'/'substrate'), so that a matches row can be
@@ -180,11 +198,24 @@ def match(
             raise ValueError(f'no checkpoint file found at {checkpoint_path}')
 
     do_restart = restart_id is not None
-    selection = f'id>{restart_id}' if do_restart else None
+    selection = f'id>={restart_id}' if do_restart else None
+
+    if do_restart and os.path.exists(f'{db_path}.lock'):
+        print(
+            f'WARNING: {db_path}.lock already exists -- if the previous run was '
+            f'killed while writing (crash, OOM, kill -9) this is a stale lock '
+            f'left behind, and ase.db will wait on it forever without any error. '
+            f'Delete it yourself once you are sure no other process is writing '
+            f'to {db_path} (rm {db_path}.lock), then rerun.'
+        )
 
     db = connect(mother_db)
     newdb = connect(db_path, append=do_restart)
     csv_writer = CsvWriter(csv_path, append=do_restart)
+
+    if do_restart:
+        clear_stale_matches(newdb, db.get(id=restart_id).cod_id)
+
     newdb.metadata = {
         'mother_db': os.path.abspath(mother_db),
         'substrate': os.path.abspath(substrate),
@@ -254,6 +285,7 @@ def add_arguments(parser):
         '-r', '--restart', action='store_true',
         help=(
             'resume from the checkpoint file next to the output database, appending to it '
+            'and re-matching the checkpointed row itself '
             '(default: always start from the beginning)'
         )
     )

@@ -263,9 +263,12 @@ Lattice matching on large databases can take a few hours, so
 `match`/`match.py` checkpoint after every mother-db row processed.
 Pass `restart=True` (`-r`/`--restart` on the CLI) to resume from the
 checkpoint file next to the output database instead of starting over.
-`score` has no equivalent -- scoring is cheap enough to just
-rerun from scratch (a few ms per material; see the module docstring in
-`score.py` for the model).
+Restart re-matches the checkpointed row itself too, not just the ones
+after it -- first clearing any of its matches already in the output
+database -- since there's no guarantee they were actually written to
+disk before the previous run stopped. `score` has no equivalent --
+scoring is cheap enough to just rerun from scratch (a few ms per
+material; see the module docstring in `score.py` for the model).
 
 ### Full example
 
