@@ -170,27 +170,27 @@ def match(
     max_film_index,
     max_strain,
     max_area,
-    output_db,
-    output_csv,
+    output_basename,
     restart,
 ):
     """
-    Match mother_db against substrate and write results to output_db/
-    output_csv in the current directory, optionally resuming from the
-    output db's checkpoint file -- restart re-matches the checkpointed
-    row itself too (not just the ones after it), first clearing any of
-    its matches already in output_db, since there's no guarantee its
-    matches made it to disk before the previous run stopped.
+    Match mother_db against substrate and write results to
+    <output_basename>.db/<output_basename>.csv in the current directory,
+    optionally resuming from the output db's checkpoint file -- restart
+    re-matches the checkpointed row itself too (not just the ones after
+    it), first clearing any of its matches already in the output db,
+    since there's no guarantee its matches made it to disk before the
+    previous run stopped.
 
-    mother_db's and substrate's absolute paths are recorded in output_db's
-    metadata (as 'mother_db'/'substrate'), so that a matches row can be
-    traced back to its source mother-db row, and refine.py can find the
+    mother_db's and substrate's absolute paths are recorded in the output
+    db's metadata (as 'mother_db'/'substrate'), so that a matches row can
+    be traced back to its source mother-db row, and refine.py can find the
     substrate again, without separately tracking either path.
     """
     print(f'\nMatching {mother_db} against {substrate}...')
 
-    db_path = output_db
-    csv_path = output_csv
+    db_path = f'{output_basename}.db'
+    csv_path = f'{output_basename}.csv'
 
     checkpoint_path = checkpoint_path_for(db_path)
 
@@ -277,12 +277,11 @@ def add_arguments(parser):
         help='max area (default: %(default)s)'
     )
     parser.add_argument(
-        '-o', '--output-db', default=config.match.output_db,
-        help='name of the output database file (default: %(default)s)'
-    )
-    parser.add_argument(
-        '--output-csv', default=config.match.output_csv,
-        help='name of the output CSV file (default: %(default)s)'
+        '-o', '--output', default=config.match.output_basename,
+        help=(
+            'basename for the output files -- results are written to '
+            '<output>.db and <output>.csv (default: %(default)s)'
+        )
     )
     parser.add_argument(
         '-r', '--restart', action='store_true',
@@ -305,8 +304,7 @@ def main(args):
         args.max_film_index,
         args.max_strain,
         args.max_area,
-        args.output_db,
-        args.output_csv,
+        args.output,
         args.restart,
     )
 

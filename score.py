@@ -201,8 +201,7 @@ def default_scoring_function(
 
 def score(
     matches_db,
-    output_csv,
-    output_db,
+    output_basename,
     scoring_fn=None,
     # only used to build the default scoring_fn (default_scoring_function)
     # when scoring_fn isn't given -- ignored otherwise
@@ -219,32 +218,37 @@ def score(
     compatible_elements=config.score.sub_compatible_elements,
 ):
     """
-    matches_db:   path to a matches .db.
-    output_csv:   CSV filename, written to the current directory.
-    output_db:    db filename, written to the current directory; one row
-                  per scored material, reusing that material's own atoms.
+    matches_db:       path to a matches .db.
+    output_basename:  basename for the output files, written to the
+                       current directory -- results go to
+                       <output_basename>.db (one row per scored material,
+                       reusing that material's own atoms) and
+                       <output_basename>.csv.
     scoring_fn:   rows (one cod_id's matches group, as group_db groups
                   matches_db) -> a dict with at least a total_score key;
-                  any other keys are carried into output_db/output_csv
+                  any other keys are carried into the output db/CSV
                   alongside the material's own mother-db fields. Defaults
                   to None, which builds default_scoring_function from this
                   call's own w_geom/w_sg/.../compatible_elements kwargs
                   (the CLI always uses this default -- an arbitrary Python
                   callable has no CLI encoding).
 
-    Every material is scored first, then all of them are written (to
-    output_csv and output_db) sorted by total_score descending, best match
-    first. Writes only; returns nothing.
+    Every material is scored first, then all of them are written (to the
+    output db/CSV) sorted by total_score descending, best match first.
+    Writes only; returns nothing.
 
-    matches_db's absolute path is recorded in output_db's metadata (as
+    matches_db's absolute path is recorded in the output db's metadata (as
     'matches_db'), so that a material's selected_match_ids can later be
     resolved back to their source rows without having to separately track
     which matches_db a given scores_db came from. matches_db's own
     'substrate' metadata (recorded there by match), if present, is
-    forwarded to output_db's metadata too, so refine.py can find the
+    forwarded to the output db's metadata too, so refine.py can find the
     substrate directly from a scores db alone.
     """
     print(f'\nScoring materials from {matches_db}...')
+
+    output_db = f'{output_basename}.db'
+    output_csv = f'{output_basename}.csv'
 
     if scoring_fn is None:
         if not math.isclose(w_geom + w_sg + w_comp, 1.0, abs_tol=1e-9):
@@ -309,12 +313,11 @@ def add_arguments(parser):
         help='path to the matches database'
     )
     parser.add_argument(
-        '-o', '--output-db', default=config.score.output_db,
-        help='name of the output database file (default: %(default)s)'
-    )
-    parser.add_argument(
-        '--output-csv', default=config.score.output_csv,
-        help='name of the output CSV file (default: %(default)s)'
+        '-o', '--output', default=config.score.output_basename,
+        help=(
+            'basename for the output files -- results are written to '
+            '<output>.db and <output>.csv (default: %(default)s)'
+        )
     )
     parser.add_argument(
         '--w-geom', type=float, default=config.score.w_geom,
@@ -336,8 +339,7 @@ def main(args):
     file's own __main__ block and by cli.py's `dbm score`."""
     score(
         args.matches_db,
-        args.output_csv,
-        args.output_db,
+        args.output,
         w_geom=args.w_geom,
         w_sg=args.w_sg,
         w_comp=args.w_comp,

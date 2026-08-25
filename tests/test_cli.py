@@ -68,8 +68,7 @@ def test_dbm_match_cli_takes_substrate_then_mother_db(tmp_path, monkeypatch):
         '--max-film-index', '1',
         '--max-strain', '0.05',
         '--max-area', '100',
-        '-o', 'matches.db',
-        '--output-csv', 'matches.csv',
+        '-o', 'matches',
     ])
 
     fresh_db = connect('matches.db')

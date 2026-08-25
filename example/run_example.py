@@ -21,16 +21,14 @@ match(
     max_film_index=1,
     max_strain=0.05,
     max_area=100,
-    output_db='example_matches.db',
-    output_csv='example_matches.csv',
+    output_basename='example_matches',
     restart=False,
 )
 
 # Assign scores to the materials based on the found matches
 score(
     matches_db='example_matches.db',
-    output_csv='example_scores.csv',
-    output_db='example_scores.db',
+    output_basename='example_scores',
 )
 
 # now inspect the results (already sorted by total_score descending) by
@@ -66,7 +64,6 @@ def strain_area_scoring_fn(rows):
 # separate output files -- doesn't touch example_scores.db/csv
 score(
     matches_db='example_matches.db',
-    output_csv='example_scores_custom.csv',
-    output_db='example_scores_custom.db',
+    output_basename='example_scores_custom',
     scoring_fn=strain_area_scoring_fn,
 )

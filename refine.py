@@ -406,7 +406,7 @@ def add_arguments(parser):
         )
     )
     parser.add_argument(
-        '-d', '--scores-db', default=config.score.output_db,
+        '-d', '--scores-db', default=f'{config.score.output_basename}.db',
         help='path to the scores database (default: %(default)s)'
     )
     parser.add_argument(

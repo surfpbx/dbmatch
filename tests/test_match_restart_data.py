@@ -38,7 +38,7 @@ def test_restart_redoes_checkpointed_row_and_reproduces_a_full_run(tmp_path, mon
     or duplicate matches."""
     monkeypatch.chdir(tmp_path)
 
-    match(output_db='golden.db', output_csv='golden.csv', restart=False, **MATCH_KWARGS)
+    match(output_basename='golden', restart=False, **MATCH_KWARGS)
     golden = match_rows('golden.db')
 
     # rows 1-4 survived the simulated crash intact; row 5 left a stray
@@ -54,6 +54,6 @@ def test_restart_redoes_checkpointed_row_and_reproduces_a_full_run(tmp_path, mon
 
     write_checkpoint(checkpoint_path_for('interrupted.db'), 5)
 
-    match(output_db='interrupted.db', output_csv='interrupted.csv', restart=True, **MATCH_KWARGS)
+    match(output_basename='interrupted', restart=True, **MATCH_KWARGS)
 
     assert match_rows('interrupted.db') == golden

@@ -128,15 +128,13 @@ match(
     max_film_index=1,
     max_strain=0.05,
     max_area=500,
-    output_db='matches.db',      # written to the current directory
-    output_csv='matches.csv',    # written to the current directory
+    output_basename='matches',   # writes matches.db and matches.csv to the current directory
     restart=False,
 )
 
 score(
     matches_db='matches.db',
-    output_csv='scores.csv',     # written to the current directory
-    output_db='scores.db',       # written to the current directory
+    output_basename='scores',    # writes scores.db and scores.csv to the current directory
 )
 ```
 
@@ -157,14 +155,13 @@ def my_scoring_fn(rows):
 
 score(
     matches_db='matches.db',
-    output_csv='scores.csv',
-    output_db='scores.db',
+    output_basename='scores',
     scoring_fn=my_scoring_fn,
 )
 ```
 
 `scoring_fn` must return a dict with at least `total_score`; any other
-keys are carried into `output_db`/`output_csv` alongside the material's
+keys are carried into the output db/CSV alongside the material's
 own mother-db fields (list-valued extras are `;`-joined into a string, the
 same way `geom_score_for_material`'s own `selected_match_ids`/
 `major_facets_scored` already are). `w_geom`/`w_sg`/`w_comp` and the rest
@@ -222,18 +219,21 @@ console app, with one subcommand per stage:
 
 ```bash
 # match the substrate on the whole mother database, with custom options
-dbm match substrate.cif mother.db --max-area 500 -o matches.db --output-csv matches.csv
+dbm match substrate.cif mother.db --max-area 500 -o matches
 # score all materials based on match quality
-dbm score matches.db -o scores.db --output-csv scores.csv
+dbm score matches.db -o scores
 # energetical refinement of the matches of COD entry 2300704
 dbm refine cod_id=2300704
 ```
 
+`-o`/`--output` is a basename, not a path with an extension -- results go
+to `<output>.db` and `<output>.csv` in the current directory.
+
 Each stage also still runs standalone, with identical flags:
 
 ```bash
-python match.py substrate.cif mother.db --max-area 500 -o matches.db --output-csv matches.csv
-python score.py matches.db -o scores.db --output-csv scores.csv
+python match.py substrate.cif mother.db --max-area 500 -o matches
+python score.py matches.db -o scores
 python refine.py 'cod_id=2300704'   # we recommend using quotes, especially for multiple-condition selections
 ```
 
@@ -289,11 +289,11 @@ Installation above).
 `config.py` centralizes the tunable defaults for all three stages, under
 three namespaces:
 
-- `config.match` -- miller index cutoffs, strain/area tolerances, and
-  default output filenames for `match.py`.
+- `config.match` -- miller index cutoffs, strain/area tolerances, and the
+  default output basename for `match.py`.
 - `config.score` -- score weights, facet-tier values, the
-  substrate-compatible space groups/elements/major-facets, and default
-  output filenames for `score.py`. These only parameterize `score.py`'s
+  substrate-compatible space groups/elements/major-facets, and the default
+  output basename for `score.py`. These only parameterize `score.py`'s
   own built-in `default_scoring_function` -- a custom `scoring_fn` (see
   "As a library" above) ignores them entirely.
 - `config.refine` -- slab layers/vacuum, and the number of points sampled
