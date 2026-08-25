@@ -59,7 +59,8 @@ def match_row(row, matcher):
 class CsvWriter:
     """
     Appends dict rows to a CSV file, inferring the header from the first
-    row.
+    row. A later row with a key not in that header has the extra key
+    silently dropped from the CSV (it's still written in full to the db).
     """
 
     def __init__(self, path, append):
@@ -69,7 +70,9 @@ class CsvWriter:
     def writerow(self, row):
         """Write row, creating the DictWriter and header on the first call."""
         if self.writer is None:
-            self.writer = csv.DictWriter(self.file, fieldnames=list(row.keys()))
+            self.writer = csv.DictWriter(
+                self.file, fieldnames=list(row.keys()), extrasaction='ignore'
+            )
             if self.file.tell() == 0:
                 self.writer.writeheader()
         self.writer.writerow(row)
