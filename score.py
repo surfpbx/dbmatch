@@ -151,12 +151,16 @@ def group_db(db):
 def _csv_row(mat):
     """mat, with every list-valued field (e.g. geom_score_for_material's own
     major_facets_scored/selected_match_ids, or any list a custom scoring_fn
-    returns) serialised as a ';'-separated string -- so comma-bearing values
+    returns) serialised as a ';'-terminated string -- so comma-bearing values
     (e.g. hkl labels like '0,0,1') don't collide with the CSV delimiter, and
     so ase db's key_value_pairs (str/int/float/bool only) can store it too,
-    via the same dict reused for newdb.write(**kvp)."""
+    via the same dict reused for newdb.write(**kvp). The trailing ';' (even
+    for a single-element list) matters: without it, a one-element list of
+    ids like [20007] would serialise to the bare string '20007', which
+    ase.db's key_value_pairs check rejects as "a string but can be
+    interpreted as int"."""
     return {
-        k: ';'.join(str(x) for x in v) if isinstance(v, list) else v
+        k: (';'.join(str(x) for x in v) + ';' if v else '') if isinstance(v, list) else v
         for k, v in mat.items()
     }
 

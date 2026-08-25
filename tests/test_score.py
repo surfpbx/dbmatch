@@ -66,8 +66,26 @@ def test_score_accepts_a_custom_scoring_fn_and_serializes_its_list_valued_extras
 
     scored = connect('scores.db').get(cod_id=1)
     assert scored.total_score == pytest.approx(0.5)
-    assert scored.my_tag == 'a;b'
-    assert 'a;b' in open('scores.csv').read()
+    assert scored.my_tag == 'a;b;'
+    assert 'a;b;' in open('scores.csv').read()
+
+
+def test_score_writes_a_single_element_numeric_id_list_without_raising(tmp_path, monkeypatch):
+    """A material whose scoring_fn returns a one-element list of ids (e.g.
+    geom_score_for_material's own selected_match_ids, when only one match
+    row was kept) must not serialise to a bare digit string like '20007' --
+    ase.db's key_value_pairs check rejects strings that look like ints."""
+    monkeypatch.chdir(tmp_path)
+    matches_db = connect('matches.db')
+    matches_db.write(Atoms('H'), cod_id=1, reduced_formula='H')
+
+    def custom_scoring_fn(rows):
+        return {'total_score': 0.5, 'selected_match_ids': [20007]}
+
+    score('matches.db', output_csv='scores.csv', output_db='scores.db', scoring_fn=custom_scoring_fn)
+
+    scored = connect('scores.db').get(cod_id=1)
+    assert scored.selected_match_ids == '20007;'
 
 
 def test_score_raises_if_scoring_fn_omits_total_score(tmp_path, monkeypatch):

@@ -171,7 +171,7 @@ def selected_matches(scores_db, cod_id, matches_db=None):
     its way back to the matches it came from."""
     scores = connect(scores_db)
     scored = scores.get(cod_id=cod_id)
-    match_ids = [int(i) for i in scored.selected_match_ids.split(';')]
+    match_ids = [int(i) for i in scored.selected_match_ids.split(';') if i]
 
     if matches_db is None:
         matches_db = scores.metadata['matches_db']
