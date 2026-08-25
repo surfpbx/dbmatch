@@ -44,7 +44,7 @@ def result_to_tuple(result):
 def test_match_row_finds_matches_for_the_identical_substrate(mother_db, golden_db, matcher):
     row = next(mother_db.select(cod_id=9011664))  # CdSe itself
 
-    _, _, results = match_row(row, matcher)
+    _, results = match_row(row, matcher)
 
     actual = sorted(result_to_tuple(r) for r in results)
     expected = sorted(

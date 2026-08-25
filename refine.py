@@ -43,6 +43,7 @@ interfaces.db, so it's not needed to regenerate anything.
 import argparse
 import os
 import subprocess
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import matplotlib.colors
@@ -56,6 +57,7 @@ from OgreInterface.surface_matching import IonicSurfaceMatcher
 from OgreInterface.surface_matching import base_surface_matcher
 
 from db_ogre_match import config
+from db_ogre_match.match import read_csv_rows
 from db_ogre_match.ogre_custom import hkl_from_str, interface_from_row
 from tqdm import tqdm
 
@@ -164,7 +166,9 @@ def _results_table(rows):
 
 
 def selected_matches(scores_db, cod_id, matches_db=None):
-    """The matches-db rows score.py picked as best-per-facet for cod_id.
+    """The matches.csv rows score.py picked as best-per-facet for cod_id,
+    each wrapped as a SimpleNamespace for attribute access (row.sub_hkl,
+    row.sub_transform, ...), matching how an ase db row reads.
 
     If matches_db isn't given, it's read from scores_db's own metadata
     (recorded there by score), so a scores db is enough on its own to find
@@ -176,17 +180,27 @@ def selected_matches(scores_db, cod_id, matches_db=None):
     if matches_db is None:
         matches_db = scores.metadata['matches_db']
 
-    matches = connect(matches_db)
-    return [matches.get(id=i) for i in match_ids]
+    rows_by_id = {row['id']: row for row in read_csv_rows(matches_db)}
+    return [SimpleNamespace(**rows_by_id[i]) for i in match_ids]
 
 
 def substrate_from_scores_db(scores_db):
     """The fixed substrate structure path recorded in scores_db's own
-    metadata -- forwarded there by score from matches_db's metadata,
-    itself recorded by match."""
+    metadata -- forwarded there by score from matches_db's metadata
+    sidecar, itself recorded by match."""
     scores = connect(scores_db)
     scores.count()  # metadata is only readable after some query
     return scores.metadata['substrate']
+
+
+def mother_db_from_scores_db(scores_db):
+    """The mother database path recorded in scores_db's own metadata --
+    forwarded there by score from matches_db's metadata sidecar, itself
+    recorded by match. Used to re-read a selected match's film atoms by
+    cod_id (matches.csv itself carries no atoms)."""
+    scores = connect(scores_db)
+    scores.count()  # metadata is only readable after some query
+    return scores.metadata['mother_db']
 
 
 def cod_ids_for_selection(scores_db, selection):
@@ -204,6 +218,7 @@ def refine(
     scores_db,
     substrate=None,
     matches_db=None,
+    mother_db=None,
     layers=config.refine.layers,
     vacuum=config.refine.vacuum,
 ):
@@ -211,7 +226,9 @@ def refine(
     'total_score>0.7', 'cod_id=2300704'); every cod_id it resolves to in
     scores_db is refined in turn. If substrate isn't given, it's read from
     scores_db's own metadata (see substrate_from_scores_db), the same way
-    matches_db defaults from scores_db's metadata in selected_matches.
+    matches_db defaults from scores_db's metadata in selected_matches, and
+    mother_db defaults from scores_db's metadata in mother_db_from_scores_db
+    (used to re-read each selected match's film atoms by cod_id).
 
     Returns the list of root folders written, one per refined cod_id."""
     cod_ids = cod_ids_for_selection(scores_db, selection)
@@ -221,18 +238,22 @@ def refine(
         substrate = substrate_from_scores_db(scores_db)
     substrate_atoms = read(substrate)
 
+    if mother_db is None:
+        mother_db = mother_db_from_scores_db(scores_db)
+    mother_db_conn = connect(mother_db)
+
     roots = []
     for cod_id in cod_ids:
         roots.append(
             _refine_one_material(
-                cod_id, scores_db, substrate_atoms, matches_db, layers, vacuum,
+                cod_id, scores_db, substrate_atoms, matches_db, mother_db_conn, layers, vacuum,
             )
         )
     return roots
 
 
 def _refine_one_material(
-    cod_id, scores_db, substrate_atoms, matches_db, layers, vacuum,
+    cod_id, scores_db, substrate_atoms, matches_db, mother_db_conn, layers, vacuum,
 ):
     matches = selected_matches(scores_db, cod_id, matches_db)
     reduced_formula = matches[0].reduced_formula
@@ -247,9 +268,12 @@ def _refine_one_material(
     results_db = connect(os.path.join(root, 'interfaces.db'), append=False)
     results_rows = []
 
-    for i, match in enumerate(matches):
-        film_atoms = match.toatoms()
+    # every selected match shares the same film atoms (they're all the
+    # same mother-db material, just different facet pairings) -- one
+    # lookup per material, not per match
+    film_atoms = mother_db_conn.get(cod_id=cod_id).toatoms()
 
+    for i, match in enumerate(matches):
         # match.py's own Matcher scans with refine_structure=False -- must
         # match here, or sub_hkl/flm_hkl silently mean different facets.
         subs = SurfaceGenerator(
@@ -419,7 +443,15 @@ def add_arguments(parser):
     parser.add_argument(
         '--matches-db', default=None,
         help=(
-            "path to the matches database (default: read from the scores "
+            "path to the matches CSV (default: read from the scores "
+            "database's own metadata, as recorded there by score.py)"
+        )
+    )
+    parser.add_argument(
+        '--mother-db', default=None,
+        help=(
+            "path to the mother database, used to re-read a selected "
+            "match's film atoms by cod_id (default: read from the scores "
             "database's own metadata, as recorded there by score.py)"
         )
     )
@@ -461,6 +493,7 @@ def main(args):
         args.scores_db,
         args.substrate,
         args.matches_db,
+        args.mother_db,
         layers=args.layers,
         vacuum=args.vacuum,
     )

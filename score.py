@@ -21,7 +21,7 @@ import re
 import warnings
 from ase.db import connect
 from db_ogre_match import config
-from db_ogre_match.match import CsvWriter
+from db_ogre_match.match import CsvWriter, read_csv_rows, read_match_metadata
 from db_ogre_match.ogre_custom import MATCH_RESULT_KEYS
 from tqdm import tqdm
 
@@ -63,7 +63,7 @@ def geom_score_for_material(rows, tier_values,
           The film tier (major/minor) is derived from flm_hkl against
           config.score.major_facets_by_bravais[row['bravais']] -- the film
           material's own bravais class. An 'id' key, if present (as set by
-          group_db), is carried through into selected_match_ids.
+          group_csv), is carried through into selected_match_ids.
 
     For each distinct substrate facet the material hits, the single match row
     maximizing
@@ -77,7 +77,7 @@ def geom_score_for_material(rows, tier_values,
         major_facets_scored     sorted list of the major facet hkl strings kept
         mean_n_sub_reps         mean n_sub_reps over the kept (best-per-facet) rows
         mean_n_flm_reps         mean n_flm_reps over the kept rows
-        selected_match_ids      sorted list of the matches-db ids of the kept
+        selected_match_ids      sorted list of the matches.csv row ids of the kept
                                  (best-per-facet) rows
     """
     best = {}
@@ -132,19 +132,17 @@ def comp_score(formula, compatible_elements=config.score.sub_compatible_elements
     return 1.0 if _formula_elements(formula) & compatible_elements else 0.0
 
 
-def group_db(db):
+def group_csv(csv_path):
     """
-    Group an ASE .db of matches by cod_id.
+    Group matches.csv by cod_id.
 
-    Returns a dict cod_id -> list of row dicts (key_value_pairs plus id and
-    formula), one dict per facet-pairing match, in db order.
+    Returns a dict cod_id -> list of row dicts (each carrying its own
+    'id', its row position in csv_path -- see read_csv_rows), one dict
+    per facet-pairing match, in file order.
     """
     grouped = {}
-    for r in db.select():
-        d = dict(r.key_value_pairs)
-        d['id'] = r.id
-        d['formula'] = r.formula
-        grouped.setdefault(d['cod_id'], []).append(d)
+    for row in read_csv_rows(csv_path):
+        grouped.setdefault(row['cod_id'], []).append(row)
     return grouped
 
 
@@ -176,7 +174,7 @@ def default_scoring_function(
 ):
     """Build score()'s own built-in scoring function: a closure over the
     tunables above, matching the scoring_fn contract score() expects --
-    rows (one cod_id's matches group, as group_db groups matches_db) in,
+    rows (one cod_id's matches group, as group_csv groups matches_db) in,
     a dict with at least total_score out. sg_number/reduced_formula are
     read off rows[0] since every match row already carries the material's
     own mother-db fields (match.py's store_matches copies them into every
@@ -203,6 +201,7 @@ def score(
     matches_db,
     output_basename,
     scoring_fn=None,
+    mother_db=None,
     # only used to build the default scoring_fn (default_scoring_function)
     # when scoring_fn isn't given -- ignored otherwise
     # final weights
@@ -218,13 +217,21 @@ def score(
     compatible_elements=config.score.sub_compatible_elements,
 ):
     """
-    matches_db:       path to a matches .db.
+    matches_db:       path to matches.csv.
     output_basename:  basename for the output files, written to the
                        current directory -- results go to
                        <output_basename>.db (one row per scored material,
-                       reusing that material's own atoms) and
-                       <output_basename>.csv.
-    scoring_fn:   rows (one cod_id's matches group, as group_db groups
+                       reusing that material's own atoms, re-read from
+                       mother_db by cod_id) and <output_basename>.csv.
+    mother_db:    path to the mother database, used to re-read each
+                  material's atoms/formula by cod_id (one lookup per
+                  material). Defaults to None, which reads it from
+                  matches_db's own metadata sidecar (recorded there by
+                  match -- see read_match_metadata); pass this explicitly
+                  to avoid relying on that sidecar (e.g. if it could be
+                  lost or moved) or to point at a different mother_db than
+                  the one match originally used.
+    scoring_fn:   rows (one cod_id's matches group, as group_csv groups
                   matches_db) -> a dict with at least a total_score key;
                   any other keys are carried into the output db/CSV
                   alongside the material's own mother-db fields. Defaults
@@ -240,10 +247,11 @@ def score(
     matches_db's absolute path is recorded in the output db's metadata (as
     'matches_db'), so that a material's selected_match_ids can later be
     resolved back to their source rows without having to separately track
-    which matches_db a given scores_db came from. matches_db's own
-    'substrate' metadata (recorded there by match), if present, is
-    forwarded to the output db's metadata too, so refine.py can find the
-    substrate directly from a scores db alone.
+    which matches_db a given scores_db came from. mother_db (whether given
+    explicitly or read from matches_db's sidecar) and matches_db's own
+    'substrate' metadata, if present, are forwarded to the output db's
+    metadata too, so refine.py can find the substrate and re-read film
+    atoms by cod_id directly from a scores db alone.
     """
     print(f'\nScoring materials from {matches_db}...')
 
@@ -262,14 +270,20 @@ def score(
             major_sub_facets, compatible_sg, compatible_elements,
         )
 
-    src_db = connect(matches_db)
-    grouped = group_db(src_db)
+    match_metadata = read_match_metadata(matches_db)
+    if mother_db is None:
+        mother_db = match_metadata.get('mother_db')
+    mother_db_conn = connect(mother_db) if mother_db is not None else None
+
+    grouped = group_csv(matches_db)
 
     csv_writer = CsvWriter(output_csv, append=False)
     newdb = connect(output_db, append=False)
     metadata = {'matches_db': os.path.abspath(matches_db)}
-    if 'substrate' in src_db.metadata:
-        metadata['substrate'] = src_db.metadata['substrate']
+    if 'substrate' in match_metadata:
+        metadata['substrate'] = match_metadata['substrate']
+    if mother_db is not None:
+        metadata['mother_db'] = os.path.abspath(mother_db)
     newdb.metadata = metadata
 
     materials = []
@@ -291,11 +305,14 @@ def score(
     materials.sort(key=lambda mat: mat['total_score'], reverse=True)
 
     for mat in materials:
+        mother_row = mother_db_conn.get(cod_id=mat['cod_id'])
+
         row = _csv_row(mat)
+        row['formula'] = mother_row.formula
         csv_writer.writerow(row)
 
         kvp = {k: v for k, v in row.items() if k not in ('id', 'formula')}
-        newdb.write(src_db.get(id=mat['id']), **kvp)
+        newdb.write(mother_row.toatoms(), **kvp)
 
     csv_writer.file.close()
 
@@ -310,13 +327,21 @@ def add_arguments(parser):
     __main__ block and by cli.py's `dbm score` subcommand)."""
     parser.add_argument(
         'matches_db',
-        help='path to the matches database'
+        help='path to the matches CSV (written by match.py)'
     )
     parser.add_argument(
         '-o', '--output', default=config.score.output_basename,
         help=(
             'basename for the output files -- results are written to '
             '<output>.db and <output>.csv (default: %(default)s)'
+        )
+    )
+    parser.add_argument(
+        '--mother-db', default=None,
+        help=(
+            "path to the mother database, used to re-read each material's "
+            "atoms/formula by cod_id (default: read from matches_db's own "
+            "metadata sidecar, as recorded there by match.py)"
         )
     )
     parser.add_argument(
@@ -340,6 +365,7 @@ def main(args):
     score(
         args.matches_db,
         args.output,
+        mother_db=args.mother_db,
         w_geom=args.w_geom,
         w_sg=args.w_sg,
         w_comp=args.w_comp,

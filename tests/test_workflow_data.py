@@ -31,11 +31,11 @@ def test_match_then_score_reproduces_golden_scores(tmp_path, monkeypatch):
         max_film_index=1,
         max_strain=0.05,
         max_area=100,
-        output_basename='matches',
+        output_csv='matches.csv',
         restart=False,
     )
     score(
-        matches_db='matches.db',
+        matches_db='matches.csv',
         output_basename='scores',
     )
 

@@ -1,4 +1,5 @@
 import argparse
+import csv
 
 import numpy as np
 import pytest
@@ -18,10 +19,18 @@ from db_ogre_match.refine import (
     add_arguments,
     cod_ids_for_selection,
     main,
+    mother_db_from_scores_db,
     selected_matches,
     substrate_from_scores_db,
     view_interface,
 )
+
+
+def _write_matches_csv(path, rows):
+    with open(path, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def test_sanitize_hkl_strips_commas():
@@ -105,27 +114,29 @@ def test_z_shift_range_respects_custom_n_points():
 
 
 def test_selected_matches_returns_rows_in_selected_match_ids_order(tmp_path):
-    matches_db = connect(str(tmp_path / 'matches.db'))
-    matches_db.write(Atoms('H'), tag='a')  # id=1
-    matches_db.write(Atoms('H'), tag='b')  # id=2
-    matches_db.write(Atoms('H'), tag='c')  # id=3
+    _write_matches_csv(str(tmp_path / 'matches.csv'), [
+        {'tag': 'a'},  # id=1
+        {'tag': 'b'},  # id=2
+        {'tag': 'c'},  # id=3
+    ])
 
     scores_db = connect(str(tmp_path / 'scores.db'))
     scores_db.write(Atoms('H'), cod_id=42, selected_match_ids='3;1')
 
-    result = selected_matches(str(tmp_path / 'scores.db'), 42, str(tmp_path / 'matches.db'))
+    result = selected_matches(str(tmp_path / 'scores.db'), 42, str(tmp_path / 'matches.csv'))
 
     assert [row.tag for row in result] == ['c', 'a']
 
 
 def test_selected_matches_reads_matches_db_from_scores_db_metadata_by_default(tmp_path):
-    matches_db = connect(str(tmp_path / 'matches.db'))
-    matches_db.write(Atoms('H'), tag='a')  # id=1
-    matches_db.write(Atoms('H'), tag='b')  # id=2
+    _write_matches_csv(str(tmp_path / 'matches.csv'), [
+        {'tag': 'a'},  # id=1
+        {'tag': 'b'},  # id=2
+    ])
 
     scores_db = connect(str(tmp_path / 'scores.db'))
     scores_db.write(Atoms('H'), cod_id=42, selected_match_ids='1;2')
-    scores_db.metadata = {'matches_db': str(tmp_path / 'matches.db')}
+    scores_db.metadata = {'matches_db': str(tmp_path / 'matches.csv')}
 
     result = selected_matches(str(tmp_path / 'scores.db'), 42)
 
@@ -135,9 +146,21 @@ def test_selected_matches_reads_matches_db_from_scores_db_metadata_by_default(tm
 def test_substrate_from_scores_db_reads_metadata(tmp_path):
     scores_db = connect(str(tmp_path / 'scores.db'))
     scores_db.write(Atoms('H'), cod_id=42, selected_match_ids='1;2')
-    scores_db.metadata = {'matches_db': 'irrelevant.db', 'substrate': '/some/substrate.cif'}
+    scores_db.metadata = {
+        'matches_db': 'irrelevant.csv', 'substrate': '/some/substrate.cif', 'mother_db': '/some/mother.db',
+    }
 
     assert substrate_from_scores_db(str(tmp_path / 'scores.db')) == '/some/substrate.cif'
+
+
+def test_mother_db_from_scores_db_reads_metadata(tmp_path):
+    scores_db = connect(str(tmp_path / 'scores.db'))
+    scores_db.write(Atoms('H'), cod_id=42, selected_match_ids='1;2')
+    scores_db.metadata = {
+        'matches_db': 'irrelevant.csv', 'substrate': '/some/substrate.cif', 'mother_db': '/some/mother.db',
+    }
+
+    assert mother_db_from_scores_db(str(tmp_path / 'scores.db')) == '/some/mother.db'
 
 
 def test_cod_ids_for_selection_filters_by_query(tmp_path):
@@ -158,14 +181,13 @@ def test_cod_ids_for_selection_with_single_cod_id_query(tmp_path):
 
 
 def test_selected_matches_propagates_keyerror_for_unknown_cod_id(tmp_path):
-    matches_db = connect(str(tmp_path / 'matches.db'))
-    matches_db.write(Atoms('H'))
+    _write_matches_csv(str(tmp_path / 'matches.csv'), [{'tag': 'a'}])
 
     scores_db = connect(str(tmp_path / 'scores.db'))
     scores_db.write(Atoms('H'), cod_id=42, selected_match_ids='1;2')
 
     with pytest.raises(KeyError):
-        selected_matches(str(tmp_path / 'scores.db'), 999, str(tmp_path / 'matches.db'))
+        selected_matches(str(tmp_path / 'scores.db'), 999, str(tmp_path / 'matches.csv'))
 
 
 def test_main_with_view_does_not_run_refine(monkeypatch):

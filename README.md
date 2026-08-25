@@ -5,18 +5,21 @@ finding epitaxial interfaces via [OgreInterface](https://github.com/DerekDardzin
 score each material by how well and how compatibly it matches, then
 energetically refine the best matches of a chosen material.
 
-The pipeline has three stages, each reading and writing plain [ASE
-databases](https://docs.ase-lib.org/ase/db/db.html) and CSV files (`refine.py`
-writes only a database, per material):
+The pipeline has three stages. `match.py` writes plain CSV only (no atoms
+duplicated per match -- see below); `score.py`/`refine.py` read and write
+[ASE databases](https://docs.ase-lib.org/ase/db/db.html) and CSV files
+(`refine.py` writes only a database, per material):
 
 ```
-substrate + mother_db  --match.py -->  matches db/csv  --score.py -->  scores db/csv  --refine.py -->  <formula>-<cod_id>/interfaces.db
+substrate + mother_db  --match.py -->  matches csv  --score.py -->  scores db/csv  --refine.py -->  <formula>-<cod_id>/interfaces.db
 ```
 
 - **`match.py`** scans every structure in the mother database against the
   substrate with `OgreInterface`'s `MillerSearch`, writing one row per
-  facet-pairing match found.
-- **`score.py`** reads a matches database back in, grouped by material
+  facet-pairing match found -- CSV only, no atoms: the film structure is
+  unchanged from mother_db, so `score.py`/`refine.py` just re-read it from
+  there by `cod_id` instead of it being duplicated once per match.
+- **`score.py`** reads a matches CSV back in, grouped by material
   (`cod_id`), and assigns each material a `total_score` based on how many
   facets it hits, how compatible its space group is, and whether it
   contains substrate-compatible elements.
@@ -128,13 +131,29 @@ match(
     max_film_index=1,
     max_strain=0.05,
     max_area=500,
-    output_basename='matches',   # writes matches.db and matches.csv to the current directory
+    output_csv='matches.csv',    # written to the current directory
     restart=False,
 )
 
 score(
-    matches_db='matches.db',
+    matches_db='matches.csv',
     output_basename='scores',    # writes scores.db and scores.csv to the current directory
+)
+```
+
+`score` needs a mother database to re-read each material's atoms/formula
+by `cod_id` (matches.csv itself carries no atoms). By default it reads
+`mother_db`'s path from matches.csv's own metadata sidecar (recorded
+there by `match`); pass `mother_db=` explicitly (`--mother-db` on the
+CLI) to avoid relying on that sidecar -- e.g. if it could be lost or
+moved -- or to point at a different mother_db than the one `match`
+originally used:
+
+```python
+score(
+    matches_db='matches.csv',
+    output_basename='scores',
+    mother_db='mother.db',       # overrides matches.csv's own metadata sidecar
 )
 ```
 
@@ -143,7 +162,7 @@ default -- pass `scoring_fn` to score by any other criterion instead:
 
 ```python
 def my_scoring_fn(rows):
-    # rows: one cod_id's matches group (group_db(matches_db)'s own value
+    # rows: one cod_id's matches group (group_csv(matches_db)'s own value
     # type) -- one dict per facet-pairing match.py found for this material,
     # carrying both match.py's own per-match fields (area, strain, sub_hkl,
     # flm_hkl, sub_transform, flm_transform, n_sub_reps, n_flm_reps) and the
@@ -154,7 +173,7 @@ def my_scoring_fn(rows):
     return {'total_score': ..., 'my_extra_field': [...]}   # total_score is mandatory
 
 score(
-    matches_db='matches.db',
+    matches_db='matches.csv',
     output_basename='scores',
     scoring_fn=my_scoring_fn,
 )
@@ -207,10 +226,12 @@ query/manipulate `db` files yourself -- `scores_db` is already written
 sorted by `total_score` descending, best match first (e.g. `ase db
 scores.db -c +cod_id` to list them).
 
-Both `substrate` and `matches_db` default to `None`, which reads
-them from `scores_db`'s own metadata (forwarded there by `score` from
-`match`) instead of requiring them to be passed/tracked separately; pass
-either explicitly to override.
+`substrate`, `matches_db`, and `mother_db` all default to `None`, which
+reads them from `scores_db`'s own metadata (forwarded there by `score`
+from `match`'s own metadata sidecar next to matches.csv) instead of
+requiring them to be passed/tracked separately -- `mother_db` is used to
+re-read each selected match's film atoms by `cod_id`, since matches.csv
+itself carries no atoms. Pass any of the three explicitly to override.
 
 ### From the command line
 
@@ -219,27 +240,30 @@ console app, with one subcommand per stage:
 
 ```bash
 # match the substrate on the whole mother database, with custom options
-dbm match substrate.cif mother.db --max-area 500 -o matches
+dbm match substrate.cif mother.db --max-area 500 -o matches.csv
 # score all materials based on match quality
-dbm score matches.db -o scores
+dbm score matches.csv -o scores
 # energetical refinement of the matches of COD entry 2300704
 dbm refine cod_id=2300704
 ```
 
-`-o`/`--output` is a basename, not a path with an extension -- results go
-to `<output>.db` and `<output>.csv` in the current directory.
+`match`'s `-o`/`--output-csv` is a plain CSV filename (its only output).
+`score`'s `-o`/`--output` is a basename -- results go to `<output>.db` and
+`<output>.csv` in the current directory. `score`'s `--mother-db` overrides
+the mother database it reads from matches.csv's own metadata sidecar by
+default (see "As a library" above).
 
 Each stage also still runs standalone, with identical flags:
 
 ```bash
-python match.py substrate.cif mother.db --max-area 500 -o matches
-python score.py matches.db -o scores
+python match.py substrate.cif mother.db --max-area 500 -o matches.csv
+python score.py matches.csv -o scores
 python refine.py 'cod_id=2300704'   # we recommend using quotes, especially for multiple-condition selections
 ```
 
-`refine`'s substrate/matches db are read from `--scores-db`'s own metadata
-by default (see "As a library" above); pass `--substrate`/`--matches-db` to
-override either.
+`refine`'s substrate/matches-csv/mother-db are read from `--scores-db`'s
+own metadata by default (see "As a library" above); pass
+`--substrate`/`--matches-db`/`--mother-db` to override any of them.
 
 To inspect a specific result afterward instead of running refine again,
 `dbm refine --view <id>` visualizes one `interfaces.db` row's optimized
@@ -262,10 +286,10 @@ strain/area tolerances, score weights, slab layers/vacuum,
 Lattice matching on large databases can take a few hours, so 
 `match`/`match.py` checkpoint after every mother-db row processed.
 Pass `restart=True` (`-r`/`--restart` on the CLI) to resume from the
-checkpoint file next to the output database instead of starting over.
+checkpoint file next to the output CSV instead of starting over.
 Restart re-matches the checkpointed row itself too, not just the ones
 after it -- first clearing any of its matches already in the output
-database -- since there's no guarantee they were actually written to
+CSV -- since there's no guarantee they were actually written to
 disk before the previous run stopped. `score` has no equivalent --
 scoring is cheap enough to just rerun from scratch (a few ms per
 material; see the module docstring in `score.py` for the model).
@@ -290,7 +314,7 @@ Installation above).
 three namespaces:
 
 - `config.match` -- miller index cutoffs, strain/area tolerances, and the
-  default output basename for `match.py`.
+  default output CSV filename for `match.py`.
 - `config.score` -- score weights, facet-tier values, the
   substrate-compatible space groups/elements/major-facets, and the default
   output basename for `score.py`. These only parameterize `score.py`'s

@@ -9,8 +9,7 @@ match = SimpleNamespace(
     max_strain=0.05,          # max strain allowed between substrate/film lattices
     max_area=500,             # max interface supercell area
     max_area_mismatch=0.08,   # max relative area mismatch between substrate/film supercells
-    output_basename='matches',  # output filename, minus extension -- results are written to
-                                 # <output_basename>.db and <output_basename>.csv
+    output_csv='matches.csv', # output CSV filename
 )
 
 # facets treated as "major" for each bravais class, keyed by bravais symbol

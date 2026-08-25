@@ -5,16 +5,15 @@ __pycache__/
 
 data/db/
 *.checkpoint
+*.meta.json
 
 # match.py/score.py default output filenames (config.py) -- written to the
 # current directory
-matches.db
 matches.csv
 scores.db
 scores.csv
 
 # example/run_example.py's own output filenames
-example/example_matches.db
 example/example_matches.csv
 example/example_scores.db
 example/example_scores.csv
@@ -24,8 +23,6 @@ example/example_scores_custom.csv
 # refine.py's <reduced_formula>-<cod_id>/ output, for run_example.py's own
 # refine_material(cod_id=2300704, ...) call
 example/TeMn-2300704/
-
-tests/data/matches.db
 
 CLAUDE.md
 

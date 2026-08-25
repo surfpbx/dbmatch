@@ -50,7 +50,7 @@ def golden_tuples(golden_db, cod_id):
 
 def test_match_row_matches_golden_fixture_for_every_row(mother_db, golden_db, matcher):
     for row in mother_db.select():
-        _, _, results = match_row(row, matcher)
+        _, results = match_row(row, matcher)
 
         actual = sorted(result_to_tuple(r) for r in results)
         expected = golden_tuples(golden_db, row.cod_id)

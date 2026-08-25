@@ -5,6 +5,7 @@ import pytest
 from ase.db import connect
 
 from db_ogre_match import cli
+from db_ogre_match.match import read_csv_rows
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 MATCH_KEYS = [
@@ -14,7 +15,7 @@ MATCH_KEYS = [
 
 
 def _match_tuple(row):
-    return tuple(row.key_value_pairs[k] for k in MATCH_KEYS)
+    return tuple(row[k] for k in MATCH_KEYS)
 
 
 def test_dbm_help_lists_all_three_subcommands(capsys):
@@ -68,13 +69,13 @@ def test_dbm_match_cli_takes_substrate_then_mother_db(tmp_path, monkeypatch):
         '--max-film-index', '1',
         '--max-strain', '0.05',
         '--max-area', '100',
-        '-o', 'matches',
+        '-o', 'matches.csv',
     ])
 
-    fresh_db = connect('matches.db')
+    fresh_rows = read_csv_rows('matches.csv')
     golden_db = connect(str(DATA_DIR / 'test-matches.db'))
 
     for cod_id in {row.cod_id for row in golden_db.select()}:
-        actual = sorted(_match_tuple(r) for r in fresh_db.select(cod_id=cod_id))
+        actual = sorted(_match_tuple(r) for r in fresh_rows if r['cod_id'] == cod_id)
         expected = sorted(_match_tuple(r) for r in golden_db.select(cod_id=cod_id))
         assert actual == expected

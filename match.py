@@ -1,8 +1,9 @@
 """Match every structure in a mother database against a substrate, writing
-results to db and CSV."""
+results to CSV."""
 
 import argparse
 import csv
+import json
 import os
 from ase.db import connect
 from ase.io import read
@@ -47,20 +48,55 @@ class Matcher:
 
 def match_row(row, matcher):
     """
-    Run matcher against a single mother-db row, returning its atoms,
-    key-value pairs, and match results.
+    Run matcher against a single mother-db row, returning its key-value
+    pairs and match results.
     """
     atoms = row.toatoms()
     kwp = row.key_value_pairs
     results = matcher(atoms)
-    return atoms, kwp, results
+    return kwp, results
+
+
+def _coerce(value):
+    """Undo CSV's stringify-everything: try int, then float, then
+    'True'/'False' -> bool, else leave as str."""
+    for t in (int, float):
+        try:
+            return t(value)
+        except ValueError:
+            pass
+    if value in ('True', 'False'):
+        return value == 'True'
+    return value
+
+
+def read_csv_rows(csv_path):
+    """
+    Read csv_path back as a list of dicts, each cell coerced back to the
+    most specific Python type it round-trips to (see _coerce) -- csv
+    itself only ever writes/reads strings. Each dict also gets an 'id'
+    key, its 1-based row position in the file -- a matches.csv row has no
+    other stable identity, but this one is stable in practice: the only
+    thing that ever rewrites matches.csv after the fact
+    (clear_stale_matches, on restart) only ever touches the tail of the
+    file, since mother_db rows are matched in strictly ascending id
+    order, so it never shifts an earlier row's position.
+    """
+    with open(csv_path, newline='') as f:
+        rows = [
+            {k: _coerce(v) for k, v in row.items()}
+            for row in csv.DictReader(f)
+        ]
+    for i, row in enumerate(rows, start=1):
+        row['id'] = i
+    return rows
 
 
 class CsvWriter:
     """
     Appends dict rows to a CSV file, inferring the header from the first
     row. A later row with a key not in that header has the extra key
-    silently dropped from the CSV (it's still written in full to the db).
+    silently dropped.
     """
 
     def __init__(self, path, append):
@@ -78,23 +114,60 @@ class CsvWriter:
         self.writer.writerow(row)
 
 
-def store_matches(newdb, csv_writer, atoms, kwp, results):
+def store_matches(csv_writer, kwp, results):
     """
-    Write each match result for a row to both newdb and csv_writer.
+    Write each match result for a row to csv_writer.
     """
     for result in results:
         kwp.update(result)
-        newdb.write(atoms, **kwp)
         csv_writer.writerow(kwp)
 
 
-def checkpoint_path_for(output_db):
+def _dotfile_path_for(output_csv, suffix):
+    """Return a dotfile path alongside output_csv (e.g. its checkpoint or
+    metadata sidecar), so it doesn't clutter directory listings."""
+    directory, name = os.path.split(output_csv)
+    return os.path.join(directory, f'.{name}{suffix}')
+
+
+def checkpoint_path_for(output_csv):
     """
-    Return the checkpoint file path that goes alongside output_db, as a
+    Return the checkpoint file path that goes alongside output_csv, as a
     dotfile so it doesn't clutter directory listings.
     """
-    directory, name = os.path.split(output_db)
-    return os.path.join(directory, f'.{name}.checkpoint')
+    return _dotfile_path_for(output_csv, '.checkpoint')
+
+
+def metadata_path_for(output_csv):
+    """
+    Return the metadata sidecar path that goes alongside output_csv, as a
+    dotfile -- CSV has no native metadata slot the way an ase db does, so
+    mother_db's/substrate's paths (needed downstream by score.py/
+    refine.py) are recorded here instead.
+    """
+    return _dotfile_path_for(output_csv, '.meta.json')
+
+
+def write_match_metadata(output_csv, mother_db, substrate):
+    """Record mother_db's/substrate's absolute paths in output_csv's
+    metadata sidecar, so a matches.csv row can be traced back to its
+    source mother-db row, and refine.py can find the substrate again,
+    without separately tracking either path."""
+    with open(metadata_path_for(output_csv), 'w') as f:
+        json.dump(
+            {'mother_db': os.path.abspath(mother_db), 'substrate': os.path.abspath(substrate)},
+            f,
+        )
+
+
+def read_match_metadata(output_csv):
+    """The dict written by write_match_metadata for output_csv, or {} if
+    no metadata sidecar exists."""
+    path = metadata_path_for(output_csv)
+    if not os.path.exists(path):
+        return {}
+    with open(path) as f:
+        return json.load(f)
 
 
 def read_checkpoint(checkpoint_path):
@@ -118,9 +191,9 @@ def write_checkpoint(checkpoint_path, row_id):
     os.replace(tmp_path, checkpoint_path)
 
 
-def clear_stale_matches(newdb, cod_id):
+def clear_stale_matches(csv_path, cod_id):
     """
-    Delete any match rows already written for cod_id from newdb.
+    Delete any match rows already written for cod_id from csv_path.
 
     Used before re-matching the checkpointed row on restart: that row's
     matches may or may not have actually made it to disk before the
@@ -128,14 +201,22 @@ def clear_stale_matches(newdb, cod_id):
     scratch, so its own prior output (partial, complete, or none at all)
     must be cleared first to avoid duplicates.
     """
-    stale_ids = [row.id for row in newdb.select(cod_id=cod_id)]
-    if stale_ids:
-        newdb.delete(stale_ids)
+    if not os.path.exists(csv_path) or os.path.getsize(csv_path) == 0:
+        return
+
+    with open(csv_path, newline='') as f:
+        reader = csv.DictReader(f)
+        fieldnames = reader.fieldnames
+        rows = [row for row in reader if row['cod_id'] != str(cod_id)]
+
+    with open(csv_path, 'w', newline='') as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
 
 
 def run_matching(
     db,
-    newdb,
     csv_writer,
     matcher,
     selection=None,
@@ -150,11 +231,11 @@ def run_matching(
     n_matches = 0
     for row in tqdm(db.select(selection), total=db.count(selection)):
         try:
-            atoms, kwp, results = match_row(row, matcher)
+            kwp, results = match_row(row, matcher)
         except:
             print(row.cod_id)
         else:
-            store_matches(newdb, csv_writer, atoms, kwp, results)
+            store_matches(csv_writer, kwp, results)
             n_matches += len(results)
 
         if checkpoint_path is not None:
@@ -170,29 +251,28 @@ def match(
     max_film_index,
     max_strain,
     max_area,
-    output_basename,
+    output_csv,
     restart,
 ):
     """
-    Match mother_db against substrate and write results to
-    <output_basename>.db/<output_basename>.csv in the current directory,
-    optionally resuming from the output db's checkpoint file -- restart
-    re-matches the checkpointed row itself too (not just the ones after
-    it), first clearing any of its matches already in the output db,
-    since there's no guarantee its matches made it to disk before the
-    previous run stopped.
+    Match mother_db against substrate and write results to output_csv in
+    the current directory, optionally resuming from output_csv's
+    checkpoint file -- restart re-matches the checkpointed row itself too
+    (not just the ones after it), first clearing any of its matches
+    already in output_csv, since there's no guarantee its matches made it
+    to disk before the previous run stopped.
 
-    mother_db's and substrate's absolute paths are recorded in the output
-    db's metadata (as 'mother_db'/'substrate'), so that a matches row can
-    be traced back to its source mother-db row, and refine.py can find the
-    substrate again, without separately tracking either path.
+    mother_db's and substrate's absolute paths are recorded in a metadata
+    sidecar next to output_csv (see write_match_metadata), so that a
+    matches row can be traced back to its source mother-db row, and
+    refine.py can find the substrate again, without separately tracking
+    either path.
     """
     print(f'\nMatching {mother_db} against {substrate}...')
 
-    db_path = f'{output_basename}.db'
-    csv_path = f'{output_basename}.csv'
+    csv_path = output_csv
 
-    checkpoint_path = checkpoint_path_for(db_path)
+    checkpoint_path = checkpoint_path_for(csv_path)
 
     restart_id = None
     if restart:
@@ -203,26 +283,16 @@ def match(
     do_restart = restart_id is not None
     selection = f'id>={restart_id}' if do_restart else None
 
-    if do_restart and os.path.exists(f'{db_path}.lock'):
-        print(
-            f'WARNING: {db_path}.lock already exists -- if the previous run was '
-            f'killed while writing (crash, OOM, kill -9) this is a stale lock '
-            f'left behind, and ase.db will wait on it forever without any error. '
-            f'Delete it yourself once you are sure no other process is writing '
-            f'to {db_path} (rm {db_path}.lock), then rerun.'
-        )
-
     db = connect(mother_db)
-    newdb = connect(db_path, append=do_restart)
-    csv_writer = CsvWriter(csv_path, append=do_restart)
 
     if do_restart:
-        clear_stale_matches(newdb, db.get(id=restart_id).cod_id)
+        clear_stale_matches(csv_path, db.get(id=restart_id).cod_id)
 
-    newdb.metadata = {
-        'mother_db': os.path.abspath(mother_db),
-        'substrate': os.path.abspath(substrate),
-    }
+    # opened only after clear_stale_matches's own rewrite (if any) is done,
+    # so its append-mode file position reflects the file's true final size
+    csv_writer = CsvWriter(csv_path, append=do_restart)
+
+    write_match_metadata(csv_path, mother_db, substrate)
 
     substrate_atoms = read(substrate)
 
@@ -235,7 +305,7 @@ def match(
     )
 
     n_matches = run_matching(
-        db, newdb,
+        db,
         csv_writer,
         matcher,
         selection,
@@ -244,8 +314,7 @@ def match(
     csv_writer.file.close()
 
     print(
-        f'Matching finished. Found {n_matches} matches, '
-        f'written to {db_path} and {csv_path}.'
+        f'Matching finished. Found {n_matches} matches, written to {csv_path}.'
     )
 
 
@@ -277,16 +346,13 @@ def add_arguments(parser):
         help='max area (default: %(default)s)'
     )
     parser.add_argument(
-        '-o', '--output', default=config.match.output_basename,
-        help=(
-            'basename for the output files -- results are written to '
-            '<output>.db and <output>.csv (default: %(default)s)'
-        )
+        '-o', '--output-csv', default=config.match.output_csv,
+        help='name of the output CSV file (default: %(default)s)'
     )
     parser.add_argument(
         '-r', '--restart', action='store_true',
         help=(
-            'resume from the checkpoint file next to the output database, appending to it '
+            'resume from the checkpoint file next to the output CSV, appending to it '
             'and re-matching the checkpointed row itself '
             '(default: always start from the beginning)'
         )
@@ -304,7 +370,7 @@ def main(args):
         args.max_film_index,
         args.max_strain,
         args.max_area,
-        args.output,
+        args.output_csv,
         args.restart,
     )
 
