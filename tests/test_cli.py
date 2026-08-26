@@ -18,12 +18,12 @@ def _match_tuple(row):
     return tuple(row[k] for k in MATCH_KEYS)
 
 
-def test_dbm_help_lists_all_three_subcommands(capsys):
+def test_dbm_help_lists_all_four_subcommands(capsys):
     with pytest.raises(SystemExit) as excinfo:
         cli.main(['--help'])
     assert excinfo.value.code == 0
     out = capsys.readouterr().out
-    assert 'match' in out and 'score' in out and 'refine' in out
+    assert 'match' in out and 'score' in out and 'refine' in out and 'convert' in out
 
 
 def test_dbm_with_no_args_exits_2():
@@ -53,6 +53,16 @@ def test_dbm_score_help_does_not_import_refine(monkeypatch, capsys):
     assert excinfo.value.code == 0
     assert 'db_ogre_match.refine' not in sys.modules
     assert 'matches_db' in capsys.readouterr().out
+
+
+def test_dbm_convert_help_does_not_import_refine(monkeypatch, capsys):
+    monkeypatch.delitem(sys.modules, 'db_ogre_match.refine', raising=False)
+
+    with pytest.raises(SystemExit) as excinfo:
+        cli.main(['convert', '--help'])
+    assert excinfo.value.code == 0
+    assert 'db_ogre_match.refine' not in sys.modules
+    assert 'src' in capsys.readouterr().out
 
 
 def test_dbm_match_cli_takes_substrate_then_mother_db(tmp_path, monkeypatch):

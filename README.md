@@ -276,6 +276,24 @@ material's own `<reduced_formula>-<cod_id>/` folder, or pass
 cd TeMn-2300704 && dbm refine --view 3
 ```
 
+### Converting between CSV and db
+
+`dbm convert` reads `src`'s own file extension and writes `dst`'s
+opposite: `.csv` -> `.db` or `.db` -> `.csv`. Any other extension pairing
+(same extension, unrecognized, missing) raises an error.
+
+```bash
+dbm convert matches.csv matches.db   # inspect with `ase db`/`ase gui` instead of a CSV
+dbm convert matches.db matches.csv   # and back
+```
+
+CSV rows carry no atomic structure, so `.csv -> .db` writes a placeholder
+`Atoms('H')` for every row -- not real structural data, just a valid atom
+for the db format to store `key_value_pairs` against. Whichever side has
+a metadata sidecar (see `match`'s own `.meta.json`, above) or `.metadata`
+carries over to the other -- this works for `scores.db` too, not just
+matches.csv.
+
 Run `dbm --help` / `dbm <stage> --help` (or equivalently `python
 <stage>.py --help`) for the full list of options (miller index cutoffs,
 strain/area tolerances, score weights, slab layers/vacuum,
@@ -358,9 +376,10 @@ values in `tests/test_score.py`, without touching disk.
 | `match.py` | matching stage: `match`, the CLI, checkpoint/restart |
 | `score.py` | scoring stage: `score`, the CLI |
 | `refine.py` | refinement stage: `refine`, the CLI |
-| `cli.py` | the `dbm` console app -- `match`/`score`/`refine` subcommands |
+| `convert.py` | `convert`, the CLI -- CSV <-> db by file extension |
+| `cli.py` | the `dbm` console app -- `match`/`score`/`refine`/`convert` subcommands |
 | `ogre_custom.py` | `OgreInterface.MillerSearch` subclass used by `match.py`, plus the closed-form `Interface` reconstruction used by `refine.py` |
-| `config.py` | shared tunable defaults for all three stages |
-| `utils.py` | `db_to_csv`, a standalone db -> CSV dump helper |
+| `config.py` | shared tunable defaults for all three pipeline stages |
+| `utils.py` | `db_to_csv`/`csv_to_db`, the standalone conversion helpers `convert.py` dispatches to |
 | `example/` | runnable example against the `tests/data/` fixtures |
 | `tests/` | pytest suite, including golden-fixture data |

@@ -15,6 +15,7 @@ _SUBCOMMAND_HELP = {
         'match': "match every structure in a mother database against a substrate. For options, check `dbm match --help`",
         'score': "score matched materials by geometric/space-group/chemistry compatibility. For options, check `dbm score --help`",
         'refine': "energetically refine a material's selected match. For options, check `dbm refine --help`",
+        'convert': "convert a matches/scores CSV to an ase db, or an ase db to CSV. For options, check `dbm convert --help`",
 }
 
 
@@ -28,6 +29,8 @@ def _load_command_module(command):
         from db_ogre_match import score as mod
     elif command == 'refine':
         from db_ogre_match import refine as mod
+    elif command == 'convert':
+        from db_ogre_match import convert as mod
     return mod
 
 
