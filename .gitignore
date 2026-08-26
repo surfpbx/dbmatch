@@ -13,6 +13,10 @@ matches.csv
 scores.db
 scores.csv
 
+# configure.py's `dbm config` template (this repo's own root is a package
+# source tree, not a downstream project that would actually commit one)
+dbm.config
+
 # example/run_example.py's own output filenames
 example/example_matches.csv
 example/example_scores.db

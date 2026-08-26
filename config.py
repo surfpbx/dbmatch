@@ -61,3 +61,63 @@ refine = SimpleNamespace(
                                # OgreInterface's own data-min/max auto-scaling -- see
                                # refine._run_surface_matching
 )
+
+# ---------------------------------------------------------
+# Project-local config file (see configure.py's `dbm config`)
+# ---------------------------------------------------------
+import ast
+import os
+
+RC_FILENAME = 'dbm.config'
+
+_NAMESPACES = {'match': match, 'score': score, 'refine': refine}
+
+
+def load_rc_file(path):
+    """
+    Parse an rc file into a {'namespace.key': value} dict.
+
+    Blank lines and '#'-prefixed comments (including inline, matplotlibrc-
+    style -- everything from the first '#' on a line onward is stripped)
+    are skipped. Each value is parsed with ast.literal_eval (so ints,
+    floats, strings, True/False, and container literals like {...}/(...)
+    all round-trip as their real Python type); a value that isn't a valid
+    literal (e.g. a bare, unquoted filename) is kept as the raw stripped
+    string instead.
+    """
+    overrides = {}
+    with open(path) as f:
+        for line in f:
+            line = line.split('#', 1)[0].strip()
+            if not line:
+                continue
+            key, _, value = line.partition(':')
+            key, value = key.strip(), value.strip()
+            try:
+                value = ast.literal_eval(value)
+            except (ValueError, SyntaxError):
+                pass
+            overrides[key] = value
+    return overrides
+
+
+def apply_overrides(overrides):
+    """
+    Patch match/score/refine in place from a {'namespace.key': value}
+    dict (as returned by load_rc_file).
+
+    Raises ValueError for a key whose namespace or attribute doesn't
+    exist -- a typo'd or stale config key should fail loudly rather than
+    be silently ignored.
+    """
+    for dotted_key, value in overrides.items():
+        namespace_name, _, attr = dotted_key.partition('.')
+        namespace = _NAMESPACES.get(namespace_name)
+        if namespace is None or not hasattr(namespace, attr):
+            raise ValueError(f'unknown config key {dotted_key!r} in {RC_FILENAME}')
+        setattr(namespace, attr, value)
+
+
+_rc_path = os.path.join(os.getcwd(), RC_FILENAME)
+if os.path.exists(_rc_path):
+    apply_overrides(load_rc_file(_rc_path))

@@ -352,6 +352,41 @@ from here. Edit the values in `config.py` to change the defaults everywhere
 at once (e.g. to tune scoring for a different substrate), or override any
 of them per-call as a keyword argument, or per-run via the CLI flags.
 
+### Project-local config: `dbm config`
+
+Not every `config.py` value has a CLI flag -- the substrate-chemistry
+knobs (`sub_compatible_elements`, `sub_compatible_sg`, `major_sub_facets`,
+`major_facets_by_bravais`) in particular don't, so swapping in a
+different substrate normally means editing `config.py` itself.
+`dbm config` writes a project-local override file instead, in a syntax
+similar to matplotlib's own `matplotlibrc`:
+
+```bash
+dbm config              # writes ./dbm.config, everything commented out
+dbm config --force      # overwrite an existing one
+dbm config -o other.config
+```
+
+Every line is commented out with the package's own current default
+already filled in -- uncomment and edit a line to override it. Values
+parse as Python literals where possible (`ast.literal_eval`: numbers,
+`True`/`False`, `{...}`/`(...)` containers all work directly), falling
+back to a plain string for anything that isn't a valid literal (e.g. a
+bare, unquoted filename):
+
+```
+match.max_strain : 0.02
+score.sub_compatible_elements : {'O', 'S', 'Se'}
+```
+
+**`dbm.config` is read once**, when `db_ogre_match`'s `config` module is
+first imported -- like `matplotlibrc` itself, editing the file (or
+changing directory) after that point has no effect until the next fresh
+run. In practice this means: any `dbm <stage>` command run from a
+directory containing `dbm.config` picks up its overrides for that whole
+invocation; a `dbm.config` written *during* a long-lived Python process
+(e.g. a notebook) won't retroactively apply.
+
 ## Testing
 
 ```bash
@@ -377,9 +412,10 @@ values in `tests/test_score.py`, without touching disk.
 | `score.py` | scoring stage: `score`, the CLI |
 | `refine.py` | refinement stage: `refine`, the CLI |
 | `convert.py` | `convert`, the CLI -- CSV <-> db by file extension |
-| `cli.py` | the `dbm` console app -- `match`/`score`/`refine`/`convert` subcommands |
+| `configure.py` | `config`, the CLI -- writes the `dbm.config` project-local override template |
+| `cli.py` | the `dbm` console app -- `match`/`score`/`refine`/`convert`/`config` subcommands |
 | `ogre_custom.py` | `OgreInterface.MillerSearch` subclass used by `match.py`, plus the closed-form `Interface` reconstruction used by `refine.py` |
-| `config.py` | shared tunable defaults for all three pipeline stages |
+| `config.py` | shared tunable defaults for all three pipeline stages, plus `dbm.config`'s own loader (`load_rc_file`/`apply_overrides`) |
 | `utils.py` | `db_to_csv`/`csv_to_db`, the standalone conversion helpers `convert.py` dispatches to |
 | `example/` | runnable example against the `tests/data/` fixtures |
 | `tests/` | pytest suite, including golden-fixture data |
