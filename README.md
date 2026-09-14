@@ -1,4 +1,4 @@
-# db-ogre-match
+# dbMatch
 
 Match every structure in a "mother" database against a fixed substrate,
 finding epitaxial interfaces via [OgreInterface](https://github.com/DerekDardzinski/OgreInterface),
